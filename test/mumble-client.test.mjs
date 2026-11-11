@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { PassThrough, Duplex } from "node:stream";
 import { test } from "node:test";
-import { MumbleClient } from "../src/mumble/client.mjs";
+import { MumbleClient, voiceId } from "../src/mumble/client.mjs";
 import { decode, encode, frame, Frames } from "../src/mumble/proto.mjs";
 
 /** A made-up server: what the client sent it, and a way to send the client messages. */
@@ -56,7 +56,7 @@ test("each speaker's Opus is handed on with who they are", async () => {
   server.send("UDPTunnel", Buffer.from([0x80, 9, 0, 0xa0, 3, ...opus]));
   server.send("UDPTunnel", Buffer.from([0x80, 44, 0, 3, ...opus]));
   await tick();
-  assert.deepEqual(heard, [{ session: 9, name: "arie", id: "abc", opus, last: true }], "someone it knows nothing of is not passed on");
+  assert.deepEqual(heard, [{ session: 9, name: "arie", id: "cert:abc", opus, last: true }], "someone it knows nothing of is not passed on");
 });
 
 test("a server that refuses, a channel that is not there, and a connection lost are said", async () => {
@@ -98,4 +98,10 @@ test("it tells the channel things, and pings so the server keeps it", async () =
   await tick();
   assert.deepEqual(server.sent("TextMessage"), [{ channel_id: [5], message: "recording" }]);
   assert.equal(server.sent("Ping").length, 1);
+});
+
+test("someone is their certificate wherever they talk, else who they are on that server", () => {
+  assert.equal(voiceId("mumble.example", { id: "cert:AB12", session: 4 }), "mumble:cert:AB12");
+  assert.equal(voiceId("mumble.example", { id: "user:7", session: 4 }), "mumble:mumble.example:user:7");
+  assert.equal(voiceId("mumble.example", { id: "", session: 4 }), "mumble:mumble.example:session:4");
 });

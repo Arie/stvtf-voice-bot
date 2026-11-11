@@ -16,6 +16,15 @@ const PING_MS = 15_000,
 
 /** @typedef {{ session: number; name: string; channel: number; id: string }} Person */
 
+/**
+ * Who someone on the server at `host` is to stv.tf: by their certificate, else as known there.
+ * @param {string} host @param {{ id: string; session: number }} p
+ */
+export function voiceId(host, p) {
+  const clean = (/** @type {string} */ t) => t.replace(/[^A-Za-z0-9:._-]/g, "");
+  return p.id.startsWith("cert:") ? `mumble:${clean(p.id)}` : `mumble:${host}:${clean(p.id || `session:${p.session}`)}`;
+}
+
 export class MumbleClient {
   /**
    * @param {{
@@ -97,9 +106,10 @@ export class MumbleClient {
         const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
         if (m.name != null) u.name = m.name;
         if (m.channel_id != null) u.channel = m.channel_id;
-        // Who they are from one visit to the next: registered, else their certificate.
-        if (m.user_id != null) u.id = `user:${m.user_id}`;
-        else if (m.hash && !u.id) u.id = m.hash;
+        // Who they are from one visit to the next: their certificate, the same on any server;
+        // else as registered on this one.
+        if (m.hash) u.id = `cert:${m.hash}`;
+        else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
         this.users.set(m.session, u);
         return;
       }

@@ -3,7 +3,7 @@
 // certificate), so the match's page can put them on a player and keep them there.
 import dns from "node:dns/promises";
 import { Forwarder } from "../forward.mjs";
-import { MumbleClient } from "./client.mjs";
+import { MumbleClient, voiceId } from "./client.mjs";
 import { isPublic } from "./jobs.mjs";
 import { Twenties } from "./repack.mjs";
 
@@ -34,8 +34,8 @@ export function startSession(job, status, o) {
   /** @type {ReturnType<typeof setInterval>[]} */
   const timers = [];
   let gone = false;
-  /** Who someone is on this server, as stv.tf knows them. @param {{ id: string; session: number }} p */
-  const idOf = p => `mumble:${job.host}:${(p.id || `session:${p.session}`).replace(/[^A-Za-z0-9:._-]/g, "")}`;
+  /** Who someone is, as stv.tf knows them. @param {{ id: string; session: number }} p */
+  const idOf = p => voiceId(job.host, p);
   // How it goes, and who is in the channel: told to stv.tf.
   const report = () => {
     const there = client?.people() ?? [];
