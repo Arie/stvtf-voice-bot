@@ -8,6 +8,7 @@ import { ChannelType, Client, GatewayIntentBits, MessageFlags, SlashCommandBuild
 import { Channel } from "./channel.mjs";
 import { matchOf } from "./match.mjs";
 import { Who } from "./who.mjs";
+import { mayControl } from "./control.mjs";
 
 const HOSTS = (process.env.STVTF_HOSTS ?? "stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf").split(",").map(h => h.trim());
 const KEY = process.env.STVTF_VOICE_KEY ?? "";
@@ -43,6 +44,8 @@ const command = new SlashCommandBuilder()
 
 /** @type {Map<string, Channel>} The channel the bot is in, by server. */
 const channels = new Map();
+/** @type {Set<string>} Servers the bot is on its way into a channel of. */
+const joining = new Set();
 /** @type {Map<string, Who>} By stv.tf origin. */
 const whos = new Map();
 
@@ -61,10 +64,13 @@ async function join(i) {
   const member = await i.guild?.members.fetch(i.user.id);
   const voice = member?.voice.channel;
   if (!voice || !i.guild) return reply(i, "Join a voice channel first: I come to the one you are in.");
-  if (channels.has(i.guild.id)) return reply(i, "I am already in a channel on this server: `/stv leave` first.");
+  if (channels.has(i.guild.id) || joining.has(i.guild.id))
+    return reply(i, "I am already in a channel on this server: `/stv leave` first.");
   const match = matchOf(i.options.getString("link", true), HOSTS);
   if (!match) return reply(i, `That is not a match or room page on ${HOSTS[0]}.`);
   const delay = i.options.getNumber("delay") ?? DEFAULT_DELAY;
+  // Held from here on: a second join meanwhile is told so.
+  joining.add(i.guild.id);
   await i.deferReply();
   const origin = new URL(match.who).origin;
   let who = whos.get(origin);
@@ -85,10 +91,12 @@ async function join(i) {
   try {
     await channel.join();
   } catch {
+    joining.delete(guildId);
     channel.leave("I could not join the channel.");
     return i.editReply("I could not join that channel (may I connect to it?).");
   }
   channels.set(guildId, channel);
+  joining.delete(guildId);
   i.guild.members.me?.setNickname(NICK).catch(() => {});
   const unlinked = await channel.unlinked();
   const how = delay ? `${delay} s behind, with the match's SourceTV` : "live, as commentary";
@@ -103,6 +111,17 @@ async function join(i) {
   );
 }
 
+const NOT_IN = "Only those in the voice channel I am in do that.";
+
+/**
+ * Whether whoever gave the command is in the voice channel the bot is in.
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {Channel} here
+ */
+async function inChannel(i, here) {
+  const member = await i.guild?.members.fetch(i.user.id);
+  return mayControl(member?.voice.channelId, here.channel.id);
+}
+
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand() || i.commandName !== "stv") return;
   const here = i.guild ? channels.get(i.guild.id) : undefined;
@@ -112,12 +131,17 @@ client.on("interactionCreate", async i => {
         return await join(i);
       case "leave":
         if (!here) return await reply(i, "I am not in a channel here.");
+        if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
         here.leave(`${i.user.displayName} asked me to.`);
         return await reply(i, "Left.");
       case "delay": {
         if (!here) return await reply(i, "I am not in a channel here.");
+        if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
         here.forwarder.delay = i.options.getNumber("delay", true);
-        return await i.reply(`The delay is ${here.forwarder.delay} s from now on.`);
+        const said = `${i.user.displayName} set the delay to ${here.forwarder.delay} s from now on${here.forwarder.delay ? "" : ": what is said here is heard **live**"}.`;
+        // Told where it is recorded, wherever the command was given.
+        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id) here.channel.send(said).catch(() => {});
+        return await i.reply(said);
       }
       case "link":
         return await reply(i, `Link your Steam account (through the one on your Discord profile): https://${HOSTS[0]}/voice/link`);

@@ -21,6 +21,8 @@ export class Channel {
     this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, onStop: why => this.leave(why) });
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
+    /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
+    this.frames = new Map();
     this.gone = false;
   }
 
@@ -49,11 +51,15 @@ export class Channel {
   }
 
   /** @param {string} id @param {Buffer} opus */
-  async #frame(id, opus) {
-    // Known from the first frame on for most; asking again is rare and quick.
-    const steamid = this.o.who.peek(id) ?? (await this.o.who.steamid(id));
-    const member = this.channel.guild.members.cache.get(id);
-    this.forwarder.frame({ steamid, discord: id, name: member?.displayName ?? "someone" }, opus);
+  #frame(id, opus) {
+    // Who they are is known from their first frame on; while it is asked, theirs wait in order.
+    const before = this.frames.get(id) ?? Promise.resolve();
+    const then = before.then(async () => {
+      const steamid = this.o.who.peek(id) ?? (await this.o.who.steamid(id));
+      const member = this.channel.guild.members.cache.get(id);
+      this.forwarder.frame({ steamid, discord: id, name: member?.displayName ?? "someone" }, opus);
+    });
+    this.frames.set(id, then);
   }
 
   /** Those in the channel now who have no Steam link, by display name. */

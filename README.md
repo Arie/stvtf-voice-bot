@@ -11,8 +11,8 @@ held by the stream's ticks so a pause or a lagging server does not put them out 
 | | |
 |---|---|
 | `/stv join link:<stv.tf match or room page> [delay:<seconds>]` | joins your voice channel, says it is recording, and passes it on; `delay` is the server's `tv_delay` (90 unless said), `0` for commentary |
-| `/stv delay delay:<seconds>` | changes the delay as it goes |
-| `/stv leave` | leaves; it also leaves when the channel is empty or the match is gone |
+| `/stv delay delay:<seconds>` | changes the delay as it goes; only those in the voice channel, and it is said there |
+| `/stv leave` | leaves (only for those in the voice channel); it also leaves when the channel is empty or the match is gone |
 | `/stv link` | where to link your Steam account (the one on your Discord profile), so your voice is your player's |
 
 Anyone in the voice channel may invite it. One channel per server (a second bot account for two
