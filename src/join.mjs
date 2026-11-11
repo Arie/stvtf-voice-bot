@@ -32,33 +32,43 @@ export async function join(i, o) {
   if (!match.invite)
     return reply(i, "No invite in that link. On the match page: 🔊 → Comms → Copy command.");
   const delay = i.options.getNumber("delay") ?? o.defaultDelay;
-  // Held from here on: a second join meanwhile is told so.
-  joining.add(i.guild.id);
-  await i.deferReply();
-  const who = o.whoFor(match.who);
   const guildId = i.guild.id;
+  // Held from here on, until it is in or not: a second join meanwhile is told so.
+  joining.add(guildId);
+  try {
+    await joinIn(i, o, voice, match, delay);
+  } finally {
+    joining.delete(guildId);
+  }
+}
+
+/**
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {Parameters<typeof join>[1]} o
+ * @param {import("discord.js").VoiceBasedChannel} voice @param {NonNullable<ReturnType<typeof matchOf>>} match @param {number} delay
+ */
+async function joinIn(i, o, voice, match, delay) {
+  const guild = /** @type {import("discord.js").Guild} */ (i.guild);
+  await i.deferReply();
   const channel = o.makeChannel({
     channel: voice,
     match,
     delay,
     key: o.key,
-    who,
+    who: o.whoFor(match.who),
     onGone: why => {
-      channels.delete(guildId);
-      i.guild?.members.me?.setNickname(null).catch(() => {});
+      o.channels.delete(guild.id);
+      guild.members.me?.setNickname(null).catch(() => {});
       if (voice.type === ChannelType.GuildVoice) voice.send(`Left: ${why}`).catch(() => {});
     },
   });
   try {
     await channel.join();
   } catch {
-    joining.delete(guildId);
     channel.leave("join failed");
     return i.editReply("Can't join that channel.");
   }
-  channels.set(guildId, channel);
-  joining.delete(guildId);
-  i.guild.members.me?.setNickname(o.nick).catch(() => {});
+  o.channels.set(guild.id, channel);
+  guild.members.me?.setNickname(o.nick).catch(() => {});
   // Said at once, as it is recording already; who has no link (a question per person) after.
   await i.editReply(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`);
   const unlinked = await channel.unlinked();

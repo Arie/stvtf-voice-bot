@@ -36,3 +36,15 @@ test("it says it is recording before it knows who is not linked, then says that"
   await joined;
   assert.match(JSON.stringify(w.said.at(-1)), /Not linked: arie/);
 });
+
+test("however a join ends, the server can be joined again", async () => {
+  for (const over of [{ deferReply: async () => Promise.reject(new Error("gone")) }, { unlinked: async () => Promise.reject(new Error("down")) }]) {
+    const w = world(over);
+    await join(w.i, w.o).catch(() => {});
+    assert.equal(w.o.joining.size, 0);
+  }
+  const w = world();
+  w.o.makeChannel = () => ({ join: async () => Promise.reject(new Error("no")), leave: () => {}, unlinked: async () => [] });
+  await join(w.i, w.o);
+  assert.equal(w.o.joining.size, 0);
+});
