@@ -43,3 +43,11 @@ test("a voice connection's error leaves that channel, and nothing else", async (
   assert.deepEqual(w.gone, ["voice error"]);
   assert.equal(w.connection.destroyed, true);
 });
+
+test("what stv.tf is told says which channel it is of", async () => {
+  const w = world();
+  await w.c.join();
+  w.c.leave("done");
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(w.told.map(t => [t.status ?? "left", t.channel]), [["General · 1", "42"], ["left", "42"]]);
+});

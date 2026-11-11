@@ -41,6 +41,7 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
       kind: "mumble",
       status: "In Team A with 2 people",
       people: [{ id: "mumble:mumble.example:user:1", name: "arie" }],
+      channel: "mumble:mumble.example:Team_A",
     },
   ]);
   // Asked again, with what it has: nothing new, nothing done.
@@ -140,4 +141,12 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   closed();
   await new Promise(r => setImmediate(r));
   assert.deepEqual(w.started.map(s => [s.job.channel, s.delay]), [["Team A", 90], ["Team B", 5]]);
+});
+
+test("what the page is told says which ask, and which channel, it is of", async () => {
+  const w = world();
+  w.wanted = [job({ asked: 3, channel: "Team A/1" })];
+  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await jobs.once();
+  assert.deepEqual([w.told[0].asked, w.told[0].channel], [3, "mumble:mumble.example:Team_A_1"]);
 });

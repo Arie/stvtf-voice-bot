@@ -94,7 +94,7 @@ export class Channel {
     if (this.gone) return;
     const people = [...this.channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    tell(this.#to(), { kind: "discord", status, people });
+    tell(this.#to(), { kind: "discord", status, people, channel: this.channel.id });
   }
 
   /** Where stv.tf is told how it goes. */
@@ -113,7 +113,7 @@ export class Channel {
     this.gone = true;
     clearInterval(this.timer);
     clearInterval(this.reporting);
-    tell(this.#to(), { kind: "discord", left: true });
+    tell(this.#to(), { kind: "discord", left: true, channel: this.channel.id });
     this.forwarder.stopped = true;
     try {
       this.connection?.destroy();

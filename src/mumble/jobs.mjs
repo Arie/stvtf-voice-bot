@@ -48,6 +48,9 @@ export function isPublic(ip) {
   return !((x[0] & 0xfe) === 0xfc || (x[0] === 0xfe && (x[1] & 0xc0) === 0x80) || x[0] === 0xff);
 }
 
+/** The channel a job's voice is said to come from, to stv.tf. @param {Job} j */
+export const channelOf = j => `mumble:${j.host}:${j.channel.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 60)}`;
+
 /** Whether stv.tf's answer holds a job the bot can do. @param {any} j @returns {j is Job} */
 const whole = j =>
   j != null && typeof j === "object" && ["match", "host", "channel"].every(k => typeof j[k] === "string" && j[k]) && Number.isInteger(j.port);
@@ -110,7 +113,7 @@ export class Jobs {
         continue;
       }
       const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
-        this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people }));
+        this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) }));
       /** @type {Entry} */
       const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
       const begin = () => {

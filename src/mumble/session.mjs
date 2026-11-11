@@ -4,7 +4,7 @@
 import dns from "node:dns/promises";
 import { Forwarder } from "../forward.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
-import { isPublic } from "./jobs.mjs";
+import { channelOf, isPublic } from "./jobs.mjs";
 import { Twenties } from "./repack.mjs";
 
 // How often what waits is sent, and how often the page is told who is in the channel.
@@ -41,7 +41,7 @@ export function startSession(job, status, o) {
     delay: job.delay,
     invite: job.invite,
     fetch: o.fetch,
-    channel: `mumble:${job.host}:${job.channel.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 60)}`,
+    channel: channelOf(job),
     onStop: why => session.leave(why),
   });
   /** @type {Map<number, Twenties>} By the speaker's session on the server. */
@@ -141,7 +141,8 @@ export function startSession(job, status, o) {
       timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));
     } catch (e) {
       gone = true;
-      status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
+      // Told to leave, it has nothing more to say: another may be there by now.
+      if (!closing) status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
     }
   })();
   return session;

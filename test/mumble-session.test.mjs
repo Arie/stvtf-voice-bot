@@ -87,3 +87,11 @@ test("a name in use is taken with a number", async () => {
   assert.equal(w.statuses.at(-1), "Team Comms · 1");
   await w.s.leave("done");
 });
+
+test("told to leave while joining, it says nothing more", async () => {
+  const w = session();
+  await wait(5);
+  await w.s.leave("moved");
+  await wait(5);
+  assert.deepEqual(w.statuses, []);
+});

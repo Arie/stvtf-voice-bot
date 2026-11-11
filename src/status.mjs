@@ -5,7 +5,7 @@ const TELL_MS = 3000;
 
 /**
  * @param {{ page: string; key: string; invite: string | null; fetch?: typeof fetch }} to
- * @param {{ kind: "discord" | "mumble"; status?: string; people?: { id: string; name: string }[]; left?: boolean }} what
+ * @param {{ kind: "discord" | "mumble"; status?: string; people?: { id: string; name: string }[]; left?: boolean; asked?: number; channel?: string }} what
  */
 export async function tell(to, what) {
   try {
