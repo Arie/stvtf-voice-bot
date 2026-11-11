@@ -89,7 +89,7 @@ export function startSession(job, status, o) {
       });
       await client.join();
       if (gone) return client.leave("disconnected");
-      client.say(`Recording for ${job.page} (${job.delay ? `tv_delay ${job.delay} s` : "live"})`);
+      client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
       report();
       timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));
     } catch (e) {

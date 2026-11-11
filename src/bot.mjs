@@ -26,7 +26,7 @@ if (!process.env.DISCORD_TOKEN || !KEY) {
 const delayOption = (/** @type {import("discord.js").SlashCommandNumberOption} */ o) =>
   o
     .setName("delay")
-    .setDescription(`tv_delay in seconds (default ${DEFAULT_DELAY}; 0 = live)`)
+    .setDescription(`tv_delay in seconds (default ${DEFAULT_DELAY}; 0 = instant)`)
     .setMinValue(0)
     .setMaxValue(MAX_DELAY);
 
@@ -105,7 +105,7 @@ async function join(i) {
   const unlinked = await channel.unlinked();
   await i.editReply(
     [
-      `🔴 **Recording** for ${match.page} (${delay ? `tv_delay ${delay} s` : "live"}). \`/stv leave\` to stop.`,
+      `🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`,
       unlinked.length ? `Not linked: ${unlinked.join(", ")} (\`/stv link\`)` : "",
     ]
       .filter(Boolean)
