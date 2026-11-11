@@ -3,8 +3,12 @@ import { test } from "node:test";
 import { tlsOptions } from "../src/mumble/client.mjs";
 import { addressOf, startSession } from "../src/mumble/session.mjs";
 import { fake, tick, welcomeIn } from "./fake-mumble.mjs";
+import { fetchOf } from "./stand.mjs";
 
-const lookup = (/** @type {string[]} */ ips) => async (host, o) => (
+/** @typedef {import("./fake-mumble.mjs").Server} Server */
+
+/** @param {string[]} ips @returns {import("../src/mumble/session.mjs").Lookup} */
+const lookup = ips => async (host, o) => (
   assert.equal(o.all, true),
   ips.map(address => ({ address, family: address.includes(":") ? 6 : 4 }))
 );
@@ -57,20 +61,30 @@ const job = (over = {}) => ({
   ...over,
 });
 
-/** A session on a made-up server, posting to a made-up stv.tf. */
+/** A session on a made-up server, posting to a made-up stv.tf. @param {Record<string, unknown>} [over] */
 function session(over = {}) {
+  /** @type {Server[]} */
   const servers = [];
+  /** @type {{ frames: string[] }[]} */
   const posts = [];
+  /** @type {string[]} */
   const statuses = [];
-  const s = startSession(job(over), (text, people) => statuses.push(text), {
+  const s = startSession(job(over), text => void statuses.push(text), {
     key: "k",
     lookup: lookup(["93.184.216.34"]),
-    connect: () => (servers.push(fake()), servers.at(-1).connect()),
-    fetch: async (url, init) => (posts.push(JSON.parse(init.body)), { ok: true, status: 200, text: async () => "ok" }),
+    connect: () => {
+      const server = fake();
+      servers.push(server);
+      return server.connect();
+    },
+    fetch: fetchOf(
+      async (url, init) => (posts.push(JSON.parse(init.body)), { ok: true, status: 200, text: async () => "ok" }),
+    ),
   });
-  return { s, servers, posts, statuses, server: () => servers.at(-1) };
+  return { s, servers, posts, statuses, server: () => /** @type {Server} */ (servers.at(-1)) };
 }
-const wait = ms => new Promise(r => setTimeout(r, ms));
+const wait = (/** @type {number} */ ms) => new Promise(r => setTimeout(r, ms));
+/** @param {Server} server @param {number} n */
 const talk = (server, n) => {
   for (let i = 0; i < n; i++) server.send("UDPTunnel", Buffer.from([0x80, 9, i, 2, 0x78, i]));
 };

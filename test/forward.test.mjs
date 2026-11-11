@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Forwarder } from "../src/forward.mjs";
+import { fetchOf } from "./stand.mjs";
+
+/** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number }} Body */
 
 const speaker = { steamid: "[U:1:5]", discord: "1", name: "a" };
 
-/** A fetch that records what was posted and answers as told. */
+/**
+ * A fetch that records what was posted and answers as told.
+ * @param {(n: number) => { status: number; text: string } | Promise<{ status: number; text: string }>} answer
+ */
 function fake(answer = () => ({ status: 200, text: "held until tick 1" })) {
+  /** @type {{ url: string; auth: string; body: Body }[]} */
   const posts = [];
-  const fetch = async (url, init) => {
+  const fetch = fetchOf(async (url, init) => {
     const body = JSON.parse(init.body);
     posts.push({ url, auth: init.headers.Authorization, body });
     const a = await answer(posts.length);
     return { status: a.status, ok: a.status < 300, text: async () => a.text };
-  };
+  });
   return { posts, fetch };
 }
 
@@ -60,10 +67,10 @@ test("slow posts keep their order", async () => {
 });
 
 test("a match that is gone, or a refused key, stops it and says why", async () => {
-  for (const [status, why] of [
+  for (const [status, why] of /** @type {[number, RegExp][]} */ ([
     [404, /ended/],
     [401, /key/],
-  ]) {
+  ])) {
     const { posts, fetch } = fake(() => ({ status, text: "" }));
     let stopped = "";
     const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, onStop: w => (stopped = w) });
@@ -107,13 +114,14 @@ test("posts say which voice channel the speaker is in", async () => {
 });
 
 test("what waits behind a slow post goes as one post a speaker, and a post has a time limit", async () => {
+  /** @type {{ body: Body; signal?: AbortSignal }[]} */
   const posts = [];
   /** @type {(() => void)[]} */
   const answers = [];
-  const fetch = (url, init) => {
+  const fetch = fetchOf((url, init) => {
     posts.push({ body: JSON.parse(init.body), signal: init.signal });
     return new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "held" })));
-  };
+  });
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
   await new Promise(r => setImmediate(r));
@@ -151,9 +159,8 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   /** @type {(() => void)[]} */
   const answers = [];
   let posts = 0;
-  const fetch = () => (
-    posts++,
-    new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" })))
+  const fetch = fetchOf(
+    () => (posts++, new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" })))),
   );
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
@@ -164,7 +171,7 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   assert.equal(f.posting, posting, "one loop drains them all");
   assert.equal(f.waiting.length, 100);
   for (let n = 0; n < 200 && answers.length; n++) {
-    answers.shift()();
+    answers.shift()?.();
     await new Promise(r => setImmediate(r));
   }
   await f.flush();

@@ -93,14 +93,15 @@ export class MumbleClient {
             clearInterval(t)
         )(setInterval(f, ms).unref()));
     return new Promise((resolve, reject) => {
-      const fail = (/** @type {string} */ why, /** @type {number | undefined} */ type) => {
+      /** @type {(why: string, type?: number) => void} */
+      const fail = (why, type) => {
         reject(Object.assign(new Error(why), { reject: type }));
         this.#end(why);
       };
       const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
       const done = () => clearTimeout(timer);
       this.joined = () => (done(), resolve(undefined));
-      this.fail = (/** @type {string} */ why, /** @type {number | undefined} */ type) => (done(), fail(why, type));
+      this.fail = (why, type) => (done(), fail(why, type));
       this.socket = connect();
       const frames = new Frames();
       this.socket.on("data", chunk => {

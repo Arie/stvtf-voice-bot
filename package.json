@@ -12,6 +12,7 @@
     "lint": "eslint src test",
     "format": "prettier --write \"src/**/*.mjs\" \"test/**/*.mjs\" eslint.config.mjs",
     "format:check": "prettier --check \"src/**/*.mjs\" \"test/**/*.mjs\" eslint.config.mjs",
+    "typecheck": "tsc -p .",
     "test": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
@@ -21,8 +22,10 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
     "eslint": "10.14.0",
     "globals": "17.14.0",
-    "prettier": "3.9.10"
+    "prettier": "3.9.10",
+    "typescript": "7.0.2"
   }
 }

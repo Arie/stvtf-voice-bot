@@ -16,10 +16,12 @@ const IN_USE = 5,
 // A server on this machine or its network is joined only when said so (for trying it out).
 const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
 
+/** @typedef {(host: string, o: { all: true }) => Promise<{ address: string }[]>} Lookup */
+
 /**
  * Where to reach `host`: one of its addresses, once every one is known to be out on the internet
  * (a name can give one public and one private, and a second lookup another).
- * @param {string} host @param {{ lookup?: typeof dns.lookup; anywhere?: boolean }} [o]
+ * @param {string} host @param {{ lookup?: Lookup; anywhere?: boolean }} [o]
  */
 export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE } = {}) {
   const all = await lookup(host, { all: true });
@@ -30,7 +32,7 @@ export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE
 
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} Status */
 /**
- * @typedef {{ key: string; name?: string; lookup?: typeof dns.lookup; connect?: () => import("node:stream").Duplex;
+ * @typedef {{ key: string; name?: string; lookup?: Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch }} Options `lookup`, `connect` and `fetch` are for tests.
  */
 

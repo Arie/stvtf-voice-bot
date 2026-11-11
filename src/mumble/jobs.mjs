@@ -54,7 +54,10 @@ for (const [ip, bits] of /** @type {[string, number][]} */ ([
 ]))
   INSIDE.addSubnet(ip, bits, "ipv6");
 
-/** Whether `ip` is out on the internet: not this machine, its network, or a link's own. @param {string} ip */
+/**
+ * Whether `ip` is out on the internet: not this machine, its network, or a link's own.
+ * @param {string} ip @returns {boolean}
+ */
 export function isPublic(ip) {
   if (net.isIPv4(ip)) return !INSIDE.check(ip, "ipv4");
   if (!net.isIPv6(ip)) return false;
@@ -67,12 +70,12 @@ export function isPublic(ip) {
 /** The channel a job's voice is said to come from, to stv.tf. @param {Job} j */
 export const channelOf = j => `mumble:${j.host}:${j.channel.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 60)}`;
 
-/** Whether stv.tf's answer holds a job the bot can do. @param {any} j @returns {j is Job} */
-const whole = j =>
-  j != null &&
-  typeof j === "object" &&
-  ["match", "host", "channel"].every(k => typeof j[k] === "string" && j[k]) &&
-  Number.isInteger(j.port);
+/** Whether stv.tf's answer holds a job the bot can do. @param {unknown} j @returns {j is Job} */
+const whole = j => {
+  if (j === null || typeof j !== "object") return false;
+  const o = /** @type {Record<string, unknown>} */ (j);
+  return ["match", "host", "channel"].every(k => typeof o[k] === "string" && o[k]) && Number.isInteger(o.port);
+};
 
 /** What makes a job another one: all but its delay. @param {Job} j */
 const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
@@ -132,9 +135,10 @@ export class Jobs {
       // Not answering is not being told to leave.
       return null;
     }
-    if (wanted == null || typeof wanted !== "object" || !Array.isArray(wanted.jobs ?? [])) return null;
-    this.version = Number(wanted.version) || 0;
-    return (wanted.jobs ?? []).filter(whole).map((/** @type {Job} */ j) => ({
+    const { jobs = [], version } = /** @type {{ jobs?: unknown; version?: unknown }} */ (wanted ?? {});
+    if (wanted === null || typeof wanted !== "object" || !Array.isArray(jobs)) return null;
+    this.version = Number(version) || 0;
+    return jobs.filter(whole).map(j => ({
       ...j,
       page: `${this.o.origin}/w/${j.match}/`,
       voice: `${this.o.origin}/w/${j.match}/voice`,
@@ -143,8 +147,9 @@ export class Jobs {
 
   /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
   #begin(job) {
-    const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
-      this.telling.push(
+    /** @type {(text: string, people?: { id: string; name: string }[]) => void} */
+    const status = (text, people) =>
+      void this.telling.push(
         tell(
           { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
           { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) },

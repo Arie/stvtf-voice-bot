@@ -4,8 +4,8 @@ import { Twenties } from "../src/mumble/repack.mjs";
 import { opusDuration } from "../src/mumble/voice.mjs";
 
 // Packets of one frame: full band CELT of 10 ms (0xf0) and of 20 ms (0xf8), hybrid of 10 ms (0x70).
-const ten = (...body) => Buffer.from([0xf0, ...body]);
-const twenty = (...body) => Buffer.from([0xf8, ...body]);
+const ten = (/** @type {number[]} */ ...body) => Buffer.from([0xf0, ...body]);
+const twenty = (/** @type {number[]} */ ...body) => Buffer.from([0xf8, ...body]);
 
 test("packets of 20 ms pass as they are", () => {
   const t = new Twenties();

@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { Channel } from "../src/channel.mjs";
+import { fetchOf, stand } from "./stand.mjs";
 
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */
 function world() {
-  const member = (id, name, bot = false) => ({ id, displayName: name, user: { bot } });
+  const member = (/** @type {string} */ id, /** @type {string} */ name, bot = false) => ({
+    id,
+    displayName: name,
+    user: { bot },
+  });
   const members = new Map([
     ["1", member("1", "arie")],
     ["bot", member("bot", "stv.tf", true)],
@@ -19,21 +24,22 @@ function world() {
       this.destroyed = true;
     },
   });
+  /** @type {{ status?: string; channel?: string }[]} */
   const told = [];
-  const fetch = async (url, init) => (
-    told.push(JSON.parse(init.body)),
-    { ok: true, status: 204, text: async () => "" }
+  const fetch = fetchOf(
+    async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" }),
   );
+  /** @type {string[]} */
   const gone = [];
   const c = new Channel({
-    channel,
+    channel: stand(channel),
     match: { voice: "https://stv.tf/w/m/voice", page: "https://stv.tf/w/m/", invite: "inv" },
     delay: 90,
     key: "k",
     who: { peek: () => null, steamid: async () => null },
-    onGone: why => gone.push(why),
+    onGone: why => void gone.push(why),
     fetch,
-    voice: { joinVoiceChannel: () => connection, entersState: async () => {} },
+    voice: { joinVoiceChannel: stand(() => connection), entersState: stand(async () => {}) },
   });
   return { c, channel, members, member, connection, told, gone };
 }
@@ -86,6 +92,6 @@ test("stv.tf is told who is here when that changes, not when anyone on the serve
   w.members.set("7", w.member("7", "coach"));
   w.c.update({ id: "7", channelId: "50" }, { id: "7", channelId: "42" });
   await new Promise(r => setImmediate(r));
-  assert.equal(w.told.at(-1).status, "General · 2");
+  assert.equal(w.told.at(-1)?.status, "General · 2");
   w.c.leave("done");
 });

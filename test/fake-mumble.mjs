@@ -19,7 +19,9 @@ export function fake() {
       server.socket.on("close", () => (server.closed = true));
       return server.socket;
     },
+    /** @param {keyof typeof import("../src/mumble/proto.mjs").TYPES} type @param {Buffer | Record<string, unknown>} message */
     send: (type, message) => toClient.write(frame(type, Buffer.isBuffer(message) ? message : encode(type, message))),
+    /** @param {string} type */
     sent: type => got.filter(m => m.type === type).map(m => decode(type, m.body)),
     end: () => toClient.end(),
   };
@@ -27,7 +29,9 @@ export function fake() {
 }
 export const tick = () => new Promise(r => setImmediate(r));
 
-/** The server lets the client in: two channels, someone in one of them, and the client itself. */
+/** @typedef {ReturnType<typeof fake>} Server */
+
+/** The server lets the client in: two channels, someone in one of them, and the client itself. @param {Server} server */
 export function welcome(server) {
   server.send("ChannelState", { channel_id: 0, name: "Root" });
   server.send("ChannelState", { channel_id: 5, parent: 0, name: "Team Comms" });
@@ -37,6 +41,7 @@ export function welcome(server) {
 }
 
 /** That, and the server moving the client to Team Comms as it asked. */
+/** @param {Server} server */
 export function welcomeIn(server) {
   welcome(server);
   server.send("UserState", { session: 2, actor: 2, channel_id: 5, recording: true });

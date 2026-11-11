@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Who } from "../src/who.mjs";
+import { fetchOf } from "./stand.mjs";
 
 test("a linked Discord user is their SteamID, asked once", async () => {
   let asked = 0;
-  const fetch = async (url, init) => {
+  const fetch = fetchOf(async (url, init) => {
     asked++;
     assert.equal(url, "https://stv.tf/voice/who?discord=42");
     assert.equal(init.headers.Authorization, "Bearer k");
     return { status: 200, ok: true, json: async () => ({ steamid: "[U:1:5]" }) };
-  };
+  });
   const who = new Who({ url: "https://stv.tf/voice/who", key: "k", fetch });
   assert.equal(await who.steamid("42"), "[U:1:5]");
   assert.equal(await who.steamid("42"), "[U:1:5]");
@@ -20,11 +21,11 @@ test("an unlinked user is asked about again in a while, as is everyone when the 
   let now = 0,
     asked = 0,
     status = 404;
-  const fetch = async () => {
+  const fetch = fetchOf(async () => {
     asked++;
     if (status === 0) throw new Error("down");
     return { status, ok: status === 200, json: async () => ({ steamid: "[U:1:9]" }) };
-  };
+  });
   const who = new Who({ url: "u", key: "k", fetch, now: () => now });
   assert.equal(await who.steamid("7"), null);
   assert.equal(await who.steamid("7"), null);

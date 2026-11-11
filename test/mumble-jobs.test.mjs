@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Jobs, isPublic } from "../src/mumble/jobs.mjs";
+import { fetchOf } from "./stand.mjs";
+
+/** @typedef {import("../src/mumble/jobs.mjs").Job} Job */
+/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} Status */
+/** @typedef {{ job: Job; status: Status; delay: number; leave: (why: string) => Promise<void> | void }} Started */
+/**
+ * @typedef {{
+ *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, status: Status) => Started | null;
+ *   told: { url: string; status?: string; asked?: number; channel?: string }[]; started: Started[]; left: [string, string, string][];
+ * }} World
+ */
 
 const tick = () => new Promise(r => setImmediate(r));
+/** @param {Record<string, unknown>} [over] */
 const job = (over = {}) => ({
   match: "m1",
   invite: "inv",
@@ -16,17 +28,19 @@ const job = (over = {}) => ({
 
 /** A made-up stv.tf (what it wants, what it was told) and made-up Mumble sessions. */
 function world() {
-  const w = { wanted: [job()], version: 1, told: [], started: [], left: [], down: false };
-  w.fetch = async (url, init = {}) => {
+  /** @type {World} */
+  const w = { wanted: [job()], version: 1, told: [], started: [], left: [], down: false, fetch, start: () => null };
+  w.fetch = fetchOf(async (url, init) => {
     if (w.down) throw new Error("down");
     if (init.method === "POST") {
       w.told.push({ url, ...JSON.parse(init.body) });
       return { ok: true, status: 204 };
     }
     return { ok: true, status: 200, json: async () => ({ jobs: w.wanted, version: w.version }) };
-  };
+  });
   w.start = (j, status) => {
-    const s = { job: j, status, delay: j.delay, leave: why => w.left.push([j.match, j.channel, why]) };
+    /** @type {Started} */
+    const s = { job: j, status, delay: j.delay, leave: why => void w.left.push([j.match, j.channel, why]) };
     w.started.push(s);
     status(`In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
     return s;
@@ -73,7 +87,7 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
     w.left.map(l => l.slice(0, 2)),
     [["m1", "Team A"]],
   );
-  assert.equal(w.started.at(-1).job.channel, "Team B");
+  assert.equal(w.started.at(-1)?.job.channel, "Team B");
   w.wanted = [];
   await jobs.once();
   assert.deepEqual(
@@ -94,7 +108,7 @@ test("stv.tf not answering sends nobody away", async () => {
 test("a server that cannot be joined is said so, and not tried over and over", async () => {
   const w = world();
   w.start = (j, status) => {
-    w.started.push(j);
+    w.started.push({ job: j, status, delay: j.delay, leave: () => {} });
     status("Could not join: the server refused me: Wrong server password");
     return null;
   };
@@ -102,7 +116,7 @@ test("a server that cannot be joined is said so, and not tried over and over", a
   await jobs.once();
   await jobs.once();
   assert.equal(w.started.length, 1);
-  assert.match(w.told[0].status, /Wrong server password/);
+  assert.match(w.told[0].status ?? "", /Wrong server password/);
 });
 
 test("only servers out on the internet are joined", () => {
@@ -160,8 +174,9 @@ test("nor any range that leads back in: benchmarking, IETF, NAT64, 6to4, IPv4 in
 test("whatever stv.tf answers, it keeps asking", async () => {
   for (const answer of [null, { jobs: {} }, { jobs: [{ match: "m1" }] }, { jobs: [null] }, "x"]) {
     const w = world();
-    w.fetch = async () => ({ ok: true, status: 200, json: async () => answer });
+    w.fetch = fetchOf(async () => ({ ok: true, status: 200, json: async () => answer }));
     // As the real one does with a job of no channel.
+    /** @type {World["start"]} */
     const start = (j, status) => (j.channel.replace(/x/, ""), w.start(j, status));
     const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
     await jobs.once();
@@ -173,10 +188,14 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   /** @type {() => void} */
   let closed = () => {};
   const start = w.start;
-  w.start = (j, status) =>
-    Object.assign(start(j, status), {
-      leave: why => (w.left.push([j.match, j.channel, why]), new Promise(r => (closed = r))),
-    });
+  w.start = (j, status) => {
+    const s = /** @type {Started} */ (start(j, status));
+    s.leave = why => {
+      w.left.push([j.match, j.channel, why]);
+      return new Promise(r => (closed = () => r()));
+    };
+    return s;
+  };
   const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
   await jobs.once();
   w.wanted = [job({ channel: "Team B" })];

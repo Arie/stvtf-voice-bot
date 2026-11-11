@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { join } from "../src/join.mjs";
+import { stand } from "./stand.mjs";
 
-/** A made-up `/stv join`, with what the bot said, and a made-up channel to join. */
+/** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
+/** @typedef {Parameters<typeof join>[1]} Options */
+/** @typedef {import("../src/join.mjs").Joined & { o: Parameters<Options["makeChannel"]>[0] }} Made */
+
+/**
+ * A made-up `/stv join`, with what the bot said, and a made-up channel to join.
+ * @param {{ deferReply?: () => Promise<void>; unlinked?: () => Promise<string[]> }} [over]
+ */
 function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } = {}) {
+  /** @type {Said[]} */
   const said = [];
-  const voice = { id: "42", type: 2, send: async m => (said.push(["channel", m]), {}) };
+  /** @param {string} where */
+  const to = where => async (/** @type {Said[1]} */ m) => void said.push([where, m]);
+  const voice = { id: "42", type: 2, send: to("channel") };
   const i = {
     user: { id: "1", displayName: "arie" },
     guild: {
@@ -13,13 +24,14 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
       members: { fetch: async () => ({ voice: { channel: voice } }), me: { setNickname: async () => {} } },
     },
     options: { getString: () => "https://stv.tf/w/abc/?voice=0123456789abcdef", getNumber: () => null },
-    reply: async m => said.push(["reply", m]),
+    reply: to("reply"),
     deferReply,
-    editReply: async m => said.push(["edit", m]),
-    followUp: async m => said.push(["follow", m]),
+    editReply: to("edit"),
+    followUp: to("follow"),
   };
-  /** @type {any} */
+  /** @type {Made | null} */
   let made = null;
+  /** @type {Options} */
   const o = {
     hosts: ["stv.tf"],
     key: "k",
@@ -27,11 +39,18 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
     defaultDelay: 90,
     channels: new Map(),
     joining: new Set(),
-    whoFor: () => ({}),
+    whoFor: () => stand({}),
     makeChannel: c =>
-      (made = { o: c, join: async () => {}, leave: () => {}, unlinked: () => (said.push(["asked"]), unlinked()) }),
+      (made = {
+        o: c,
+        join: async () => {},
+        leave: () => {},
+        unlinked: () => (said.push(["asked", undefined]), unlinked()),
+      }),
   };
-  return { i, o, said, made: () => made };
+  /** @type {import("discord.js").ChatInputCommandInteraction} */
+  const interaction = stand(i);
+  return { i: interaction, o, said, made: () => /** @type {Made} */ (made) };
 }
 
 test("it says it is recording before it knows who is not linked, then says that", async () => {
@@ -40,7 +59,7 @@ test("it says it is recording before it knows who is not linked, then says that"
   const w = world({ unlinked: () => new Promise(r => (known = r)) });
   const joined = join(w.i, w.o);
   await new Promise(r => setImmediate(r));
-  assert.match(w.said.find(s => s[0] === "edit")?.[1].content ?? "", /Recording/);
+  assert.match(w.said.find(s => s[0] === "edit")?.[1]?.content ?? "", /Recording/);
   known(["arie"]);
   await joined;
   assert.match(JSON.stringify(w.said.at(-1)), /Not linked: arie/);
@@ -71,5 +90,5 @@ test("what it says in a channel mentions nobody, whatever names are in it", asyn
   w.made().o.onGone("/stv leave by @everyone");
   await new Promise(r => setImmediate(r));
   for (const kind of ["follow", "channel"])
-    assert.deepEqual(w.said.find(s => s[0] === kind)?.[1].allowedMentions, { parse: [] }, kind);
+    assert.deepEqual(w.said.find(s => s[0] === kind)?.[1]?.allowedMentions, { parse: [] }, kind);
 });

@@ -36,13 +36,14 @@ export class Who {
         signal: AbortSignal.timeout(ASK_MS),
         redirect: "error",
       });
-      if (r.ok) steamid = (await r.json()).steamid ?? null;
+      const said = r.ok ? /** @type {{ steamid?: unknown } | null} */ (await r.json()) : null;
+      if (typeof said?.steamid === "string") steamid = said.steamid;
     } catch {}
     this.known.set(discord, { steamid, at: this.o.now() });
     return steamid;
   }
 
-  /** What is known of `discord` now, without asking. */
+  /** What is known of `discord` now, without asking. @param {string} discord */
   peek(discord) {
     return this.known.get(discord)?.steamid ?? null;
   }
