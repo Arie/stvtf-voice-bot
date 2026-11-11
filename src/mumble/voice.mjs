@@ -25,8 +25,9 @@ export function varint(b, at) {
 
 /**
  * @param {Buffer} packet What a UDPTunnel message holds.
- * @returns {{ session: number; sequence: number; opus: Buffer; last: boolean } | null} None for
- * what is no Opus voice (a ping, an old codec) or is cut short.
+ * @returns {{ target: number; session: number; sequence: number; opus: Buffer; last: boolean } | null}
+ * None for what is no Opus voice (a ping, an old codec) or is cut short. `target`: 0 is talk to
+ * the channel; 1 to 30 a whisper or shout; 31 the server's loopback.
  */
 export function parseVoice(packet) {
   if (packet.length < 2 || packet[0] >> 5 !== OPUS) return null;
@@ -41,7 +42,7 @@ export function parseVoice(packet) {
   const [session, sequence, size] = numbers;
   const length = size & (LAST - 1);
   if (at + length > packet.length) return null;
-  return { session, sequence, opus: packet.subarray(at, at + length), last: (size & LAST) !== 0 };
+  return { target: packet[0] & 31, session, sequence, opus: packet.subarray(at, at + length), last: (size & LAST) !== 0 };
 }
 
 /**

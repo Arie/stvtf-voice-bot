@@ -27,7 +27,8 @@ export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE
 
 /**
  * @param {import("./jobs.mjs").Job} job @param {(text: string, people?: { id: string; name: string }[]) => void} status
- * @param {{ key: string; name?: string }} o
+ * @param {{ key: string; name?: string; lookup?: typeof dns.lookup; connect?: () => import("node:stream").Duplex; fetch?: typeof fetch }} o
+ * `lookup`, `connect` and `fetch` are for tests.
  * @returns {import("./jobs.mjs").Session}
  */
 export function startSession(job, status, o) {
@@ -36,6 +37,7 @@ export function startSession(job, status, o) {
     key: o.key,
     delay: job.delay,
     invite: job.invite,
+    fetch: o.fetch,
     channel: `mumble:${job.host}:${job.channel.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 60)}`,
     onStop: why => session.leave(why),
   });
@@ -78,7 +80,7 @@ export function startSession(job, status, o) {
   };
   (async () => {
     try {
-      const address = await addressOf(job.host);
+      const address = await addressOf(job.host, { lookup: o.lookup });
       client = new MumbleClient({
         host: job.host,
         address,
@@ -86,7 +88,10 @@ export function startSession(job, status, o) {
         username: o.name ?? "stv.tf",
         password: job.password || undefined,
         channel: job.channel,
+        connect: o.connect,
         onVoice: v => {
+          // What comes once told to leave is not passed on.
+          if (gone) return;
           const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
           const who = { steamid: null, discord: idOf(v), name: v.name };
           for (const opus of [.../** @type {Twenties} */ (packer).push(v.opus), ...(v.last ? /** @type {Twenties} */ (packer).flush() : [])])

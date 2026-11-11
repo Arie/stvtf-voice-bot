@@ -37,8 +37,9 @@ test("a voice packet says who talks, and holds one Opus packet and whether the u
   // Opus (type 4), to everyone; session 300; sequence 9; five bytes of Opus, the last of an utterance.
   const opus = Buffer.from([0x78, 1, 2, 3, 4]);
   const packet = Buffer.from([0x80, 0x81, 0x2c, 9, 0xa0, 5, ...opus, 0, 0, 0, 0]);
-  assert.deepEqual(parseVoice(packet), { session: 300, sequence: 9, opus, last: true });
+  assert.deepEqual(parseVoice(packet), { target: 0, session: 300, sequence: 9, opus, last: true });
   assert.equal(parseVoice(Buffer.from([0x80, 0x81, 0x2c, 9, 5, ...opus]))?.last, false);
+  assert.equal(parseVoice(Buffer.from([0x82, 0x81, 0x2c, 9, 5, ...opus]))?.target, 2, "a whisper");
   assert.equal(parseVoice(Buffer.from([0x20, 1, 2])), null, "a ping, or another codec: not voice of ours");
   assert.equal(parseVoice(Buffer.from([0x80, 1, 9, 50, 1])), null, "cut short");
 });

@@ -62,6 +62,10 @@ export class MumbleClient {
     this.channels = new Map();
     this.session = -1;
     this.channel = -1;
+    /** Whether the server has it in its channel: only then is voice taken. */
+    this.in = false;
+    /** @type {(() => void) | null} Called once the server has moved it there. */
+    this.moved = null;
     this.gone = false;
   }
 
@@ -108,7 +112,8 @@ export class MumbleClient {
     if (type === "UDPTunnel") {
       const v = parseVoice(body);
       const who = v && this.users.get(v.session);
-      if (v && who) this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
+      // Talk to the channel only, from someone in it; never a whisper.
+      if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session) this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
       return;
     }
     const m = decode(type, body);
@@ -133,6 +138,12 @@ export class MumbleClient {
         if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
         else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
         this.users.set(m.session, u);
+        if (m.session !== this.session) return;
+        if (this.moved && u.channel === this.channel) {
+          this.in = true;
+          this.moved();
+          this.moved = null;
+        } else if (this.in && u.channel !== this.channel) this.#end("moved");
         return;
       }
       case "UserRemove":
@@ -145,11 +156,16 @@ export class MumbleClient {
         const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
         if (!found) return fail(`no channel "${this.o.channel}"`);
         this.channel = found[0];
-        // Muted: it only listens. Not deafened: a deafened client is sent no voice.
-        this.#send("UserState", { session: this.session, channel_id: this.channel, self_mute: true, recording: true });
+        // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
+        // the server says it is there.
+        const there = this.users.get(this.session)?.channel === this.channel;
+        this.#send("UserState", { session: this.session, channel_id: there ? undefined : this.channel, self_mute: true, recording: true });
+        if (!there) return void (this.moved = joined);
+        this.in = true;
         return joined();
       }
       case "PermissionDenied":
+        if (this.moved) return fail("move refused");
         this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
         return;
       case "TextMessage":
