@@ -20,9 +20,8 @@ const ASK_MS = 40_000,
 function bytes6(ip) {
   // One that ends in IPv4's form: those four bytes as two groups.
   const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
-  const text = v4
-    ? ip.slice(0, v4.index) + ((+v4[1] << 8) | +v4[2]).toString(16) + ":" + ((+v4[3] << 8) | +v4[4]).toString(16)
-    : ip;
+  const [a, b, c, d] = v4 ? v4.slice(1).map(Number) : [];
+  const text = v4 ? `${ip.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}` : ip;
   const [l, r] = text.split("::");
   const left = l ? l.split(":") : [],
     right = r ? r.split(":") : [];
@@ -30,32 +29,39 @@ function bytes6(ip) {
   return groups.flatMap(g => [parseInt(g, 16) >> 8, parseInt(g, 16) & 255]);
 }
 
+// What is not out on the internet: this machine, its networks, a link's own, multicast and the
+// rest of what is set aside; and NAT64 and 6to4, which lead to IPv4 addresses of any kind.
+const INSIDE = new net.BlockList();
+for (const [ip, bits] of /** @type {[string, number][]} */ ([
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["224.0.0.0", 3],
+]))
+  INSIDE.addSubnet(ip, bits, "ipv4");
+for (const [ip, bits] of /** @type {[string, number][]} */ ([
+  ["64:ff9b::", 32],
+  ["2002::", 16],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["ff00::", 8],
+]))
+  INSIDE.addSubnet(ip, bits, "ipv6");
+
 /** Whether `ip` is out on the internet: not this machine, its network, or a link's own. @param {string} ip */
 export function isPublic(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b, c] = ip.split(".").map(Number);
-    return !(
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b < 32) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b < 128) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      (a === 192 && b === 0 && c === 0) ||
-      a >= 224
-    );
-  }
+  if (net.isIPv4(ip)) return !INSIDE.check(ip, "ipv4");
   if (!net.isIPv6(ip)) return false;
   const x = bytes6(ip);
-  const word = (/** @type {number} */ i) => x[i] * 256 + x[i + 1];
-  // IPv4 in IPv6 (mapped, or the old compatible form): as that address.
-  if (x.slice(0, 10).every(b => b === 0)) return word(10) === 0xffff && isPublic(x.slice(12).join("."));
-  // NAT64 and 6to4 lead to IPv4 addresses of any kind.
-  if (word(0) === 0x64 && word(2) === 0xff9b) return false;
-  if (word(0) === 0x2002) return false;
-  return !((x[0] & 0xfe) === 0xfc || (x[0] === 0xfe && (x[1] & 0xc0) === 0x80) || x[0] === 0xff);
+  // IPv4 in IPv6 (mapped, or the old compatible form, :: and ::1 among them): as that address.
+  if (x.slice(0, 10).every(n => n === 0)) return x[10] === 255 && x[11] === 255 && isPublic(x.slice(12).join("."));
+  return !INSIDE.check(ip, "ipv6");
 }
 
 /** The channel a job's voice is said to come from, to stv.tf. @param {Job} j */
@@ -92,27 +98,8 @@ export class Jobs {
 
   /** Asks what is wanted (waiting for a change, once it knows how things stand) and sees to it. */
   async once() {
-    let wanted;
-    try {
-      const r = await this.o.fetch(`${this.o.origin}/voice/mumble?since=${this.version}`, {
-        headers: { Authorization: `Bearer ${this.o.key}` },
-        signal: AbortSignal.timeout(ASK_MS),
-        redirect: "error",
-      });
-      if (!r.ok) return false;
-      wanted = await r.json();
-    } catch {
-      // Not answering is not being told to leave.
-      return false;
-    }
-    if (wanted == null || typeof wanted !== "object" || !Array.isArray(wanted.jobs ?? [])) return false;
-    this.version = Number(wanted.version) || 0;
-    /** @type {Job[]} */
-    const jobs = (wanted.jobs ?? []).filter(whole).map((/** @type {any} */ j) => ({
-      ...j,
-      page: `${this.o.origin}/w/${j.match}/`,
-      voice: `${this.o.origin}/w/${j.match}/voice`,
-    }));
+    const jobs = await this.#ask();
+    if (!jobs) return false;
     for (const [match, had] of this.sessions) {
       const now = jobs.find(j => j.match === match);
       if (now && same(now) === had.same) continue;
@@ -120,37 +107,65 @@ export class Jobs {
     }
     for (const job of jobs) {
       const had = this.sessions.get(job.match);
-      if (had) {
+      if (!had) this.#begin(job);
+      else {
         had.job.delay = job.delay;
         if (had.session) had.session.delay = job.delay;
-        continue;
       }
-      const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
-        this.telling.push(
-          tell(
-            { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
-            { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) },
-          ),
-        );
-      /** @type {Entry} */
-      const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
-      const begin = () => {
-        if (entry.left) return;
-        // One that would not be joined is not tried again until it is asked for anew.
-        try {
-          entry.session = this.o.start(entry.job, status);
-        } catch {
-          status("Could not join", []);
-        }
-      };
-      // The one before signs in by the same name: this one goes in once it is out.
-      const before = this.closing.get(job.match);
-      if (before) entry.ready = before.then(begin);
-      else begin();
-      this.sessions.set(job.match, entry);
     }
     await Promise.all(this.telling.splice(0));
     return true;
+  }
+
+  /** What stv.tf wants, or null when it does not answer (or not as it should). @returns {Promise<Job[] | null>} */
+  async #ask() {
+    let wanted;
+    try {
+      const r = await this.o.fetch(`${this.o.origin}/voice/mumble?since=${this.version}`, {
+        headers: { Authorization: `Bearer ${this.o.key}` },
+        signal: AbortSignal.timeout(ASK_MS),
+        redirect: "error",
+      });
+      if (!r.ok) return null;
+      wanted = await r.json();
+    } catch {
+      // Not answering is not being told to leave.
+      return null;
+    }
+    if (wanted == null || typeof wanted !== "object" || !Array.isArray(wanted.jobs ?? [])) return null;
+    this.version = Number(wanted.version) || 0;
+    return (wanted.jobs ?? []).filter(whole).map((/** @type {Job} */ j) => ({
+      ...j,
+      page: `${this.o.origin}/w/${j.match}/`,
+      voice: `${this.o.origin}/w/${j.match}/voice`,
+    }));
+  }
+
+  /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
+  #begin(job) {
+    const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
+      this.telling.push(
+        tell(
+          { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
+          { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) },
+        ),
+      );
+    /** @type {Entry} */
+    const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
+    const begin = () => {
+      if (entry.left) return;
+      // One that would not be joined is not tried again until it is asked for anew.
+      try {
+        entry.session = this.o.start(entry.job, status);
+      } catch {
+        status("Could not join", []);
+      }
+    };
+    // The one before signs in by the same name: this one goes in once it is out.
+    const before = this.closing.get(job.match);
+    if (before) entry.ready = before.then(begin);
+    else begin();
+    this.sessions.set(job.match, entry);
   }
 
   /** Keeps asking until stopped. */

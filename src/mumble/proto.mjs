@@ -100,40 +100,47 @@ export function decode(type, body) {
   const out = {};
   const fields = FIELDS[type] ?? {};
   for (let at = 0; at < body.length;) {
-    let tag;
+    let tag, raw;
     [tag, at] = readVarint(body, at);
+    [raw, at] = readValue(body, at, tag & 7);
     const [name, kind] = fields[tag >> 3] ?? [];
-    let value;
-    switch (tag & 7) {
-      case 0:
-        [value, at] = readVarint(body, at);
-        break;
-      case 1:
-        at += 8;
-        break;
-      case 2: {
-        let length;
-        [length, at] = readVarint(body, at);
-        if (at + length > body.length) throw new Error("a field cut short");
-        value = body.subarray(at, at + length);
-        at += length;
-        break;
-      }
-      case 5:
-        at += 4;
-        break;
-      default:
-        throw new Error(`a field of a kind unknown (${tag & 7})`);
-    }
-    if (!name || value === undefined) continue;
-    if (kind.startsWith("string")) value = Buffer.isBuffer(value) ? value.toString() : undefined;
-    else if (Buffer.isBuffer(value)) continue;
-    else if (kind === "bool") value = value !== 0;
+    const value = name ? typed(kind, raw) : undefined;
     if (value === undefined) continue;
     if (kind.endsWith("[]")) (out[name] ??= []).push(value);
     else out[name] = value;
   }
   return out;
+}
+
+/**
+ * A field's value, of the wire type given: a number, the bytes of one of a length, or none for
+ * those of fixed length (none of ours).
+ * @param {Buffer} body @param {number} at @param {number} wire
+ * @returns {[number | Buffer | undefined, number]} It, and where it ends.
+ */
+function readValue(body, at, wire) {
+  switch (wire) {
+    case 0:
+      return readVarint(body, at);
+    case 1:
+      return [undefined, at + 8];
+    case 2: {
+      const [length, start] = readVarint(body, at);
+      if (start + length > body.length) throw new Error("a field cut short");
+      return [body.subarray(start, start + length), start + length];
+    }
+    case 5:
+      return [undefined, at + 4];
+    default:
+      throw new Error(`a field of a kind unknown (${wire})`);
+  }
+}
+
+/** A value as its field has it; none if it is not of that kind. @param {string} kind @param {number | Buffer | undefined} v */
+function typed(kind, v) {
+  if (kind.startsWith("string")) return Buffer.isBuffer(v) ? v.toString() : undefined;
+  if (typeof v !== "number") return undefined;
+  return kind === "bool" ? v !== 0 : v;
 }
 
 /** A message as the connection carries it. @param {keyof typeof TYPES} type @param {Buffer} body */

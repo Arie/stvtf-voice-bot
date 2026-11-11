@@ -28,131 +28,160 @@ export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE
   return all[0].address;
 }
 
+/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} Status */
 /**
- * @param {import("./jobs.mjs").Job} job @param {(text: string, people?: { id: string; name: string }[]) => void} status
- * @param {{ key: string; name?: string; lookup?: typeof dns.lookup; connect?: () => import("node:stream").Duplex; fetch?: typeof fetch }} o
- * `lookup`, `connect` and `fetch` are for tests.
+ * @typedef {{ key: string; name?: string; lookup?: typeof dns.lookup; connect?: () => import("node:stream").Duplex;
+ *   fetch?: typeof fetch }} Options `lookup`, `connect` and `fetch` are for tests.
+ */
+
+/**
+ * @param {import("./jobs.mjs").Job} job @param {Status} status @param {Options} o
  * @returns {import("./jobs.mjs").Session}
  */
 export function startSession(job, status, o) {
-  const forwarder = new Forwarder({
-    url: job.voice,
-    key: o.key,
-    delay: job.delay,
-    invite: job.invite,
-    fetch: o.fetch,
-    channel: channelOf(job),
-    onStop: why => session.leave(why),
-  });
-  /** @type {Map<number, Twenties>} By the speaker's session on the server. */
-  const packers = new Map();
+  return new MumbleSession(job, status, o);
+}
+
+class MumbleSession {
   /** @type {MumbleClient | null} */
-  let client = null;
+  client = null;
   /** @type {ReturnType<typeof setInterval>[]} */
-  const timers = [];
-  let gone = false;
-  /** @type {Promise<void> | null} */
-  let closing = null;
+  timers = [];
+  /** Whether it is done: told to leave, out, or never in. */
+  gone = false;
+  /** @type {Promise<void> | null} Once told to leave: resolves when the connection is closed. */
+  closing = null;
+  /** @type {Map<number, Twenties>} By the speaker's session on the server. */
+  packers = new Map();
+  /** @type {string | undefined} */
+  address;
+
+  /** @param {import("./jobs.mjs").Job} job @param {Status} status @param {Options} o */
+  constructor(job, status, o) {
+    this.job = job;
+    this.status = status;
+    this.o = o;
+    this.forwarder = new Forwarder({
+      url: job.voice,
+      key: o.key,
+      delay: job.delay,
+      invite: job.invite,
+      fetch: o.fetch,
+      channel: channelOf(job),
+      onStop: why => this.leave(why),
+    });
+    this.started = this.#start();
+  }
+
+  get delay() {
+    return this.forwarder.delay;
+  }
+
+  set delay(d) {
+    if (d === this.forwarder.delay) return;
+    this.forwarder.delay = d;
+    this.client?.say(`tv_delay: ${d} s${d ? "" : " (live)"}`);
+  }
+
+  /** @param {string} why @returns {Promise<void>} Once its connection is closed. */
+  leave(why) {
+    if (this.closing) return this.closing;
+    this.gone = true;
+    this.timers.forEach(clearInterval);
+    this.forwarder.flush();
+    this.closing = (async () => {
+      if (this.client?.in) {
+        this.client.say(`Leaving: ${why}`);
+        // The goodbye gets a moment to go out.
+        await new Promise(r => setTimeout(r, 200));
+      }
+      this.client?.leave(why);
+      // A join under way ends once its connection is closed; one not yet begun is not begun.
+      await this.started;
+      await this.client?.closed;
+    })();
+    return this.closing;
+  }
+
   /** Who someone is, as stv.tf knows them. @param {{ id: string; session: number }} p */
-  const idOf = p => voiceId(job.host, p);
-  // How it goes, and who is in the channel: told to stv.tf.
-  const report = () => {
-    const there = client?.people() ?? [];
-    const n = there.length;
-    status(
-      `${job.channel} · ${n}`,
-      there.map(p => ({ id: idOf(p), name: p.name })),
+  #idOf(p) {
+    return voiceId(this.job.host, p);
+  }
+
+  /** How it goes, and who is in the channel: told to stv.tf. */
+  #report() {
+    const there = this.client?.people() ?? [];
+    this.status(
+      `${this.job.channel} · ${there.length}`,
+      there.map(p => ({ id: this.#idOf(p), name: p.name })),
     );
-  };
-  const session = {
-    get delay() {
-      return forwarder.delay;
-    },
-    set delay(d) {
-      if (d === forwarder.delay) return;
-      forwarder.delay = d;
-      client?.say(`tv_delay: ${d} s${d ? "" : " (live)"}`);
-    },
-    /** @param {string} why @returns {Promise<void>} Once its connection is closed. */
-    leave(why) {
-      if (closing) return closing;
-      gone = true;
-      timers.forEach(clearInterval);
-      forwarder.flush();
-      closing = (async () => {
-        if (client?.in) {
-          client.say(`Leaving: ${why}`);
-          // The goodbye gets a moment to go out.
-          await new Promise(r => setTimeout(r, 200));
-        }
-        client?.leave(why);
-        // A join under way ends once its connection is closed; one not yet begun is not begun.
-        await started;
-        await client?.closed;
-      })();
-      return closing;
-    },
-  };
+  }
+
+  async #start() {
+    const { job } = this;
+    try {
+      this.address = await addressOf(job.host, { lookup: this.o.lookup });
+      const client = await this.#join();
+      if (!client) return;
+      if (this.gone) return void client.leave("disconnected");
+      client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
+      this.#report();
+      this.timers.push(
+        setInterval(() => this.forwarder.flush(), FLUSH_MS),
+        setInterval(() => this.#report(), STATUS_MS),
+      );
+    } catch (e) {
+      this.gone = true;
+      // Told to leave, it has nothing more to say: another may be there by now.
+      if (!this.closing) this.status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
+    }
+  }
+
+  /** In the channel; a name in use (a match before this one, still leaving) is taken with a number. */
+  async #join() {
+    const name = this.o.name ?? "stv.tf";
+    for (let n = 1; ; n++) {
+      if (this.gone) return null;
+      const client = (this.client = this.#client(n === 1 ? name : `${name} ${n}`));
+      try {
+        await client.join();
+        return client;
+      } catch (e) {
+        if (/** @type {{ reject?: number }} */ (e).reject !== IN_USE || n >= NAMES) throw e;
+      }
+    }
+  }
+
   /** @param {string} username */
-  const connect = username => {
+  #client(username) {
+    const { job } = this;
     const c = new MumbleClient({
       host: job.host,
-      address,
+      address: this.address,
       port: job.port,
       username,
       password: job.password || undefined,
       channel: job.channel,
-      connect: o.connect,
-      onVoice: v => {
-        // What comes once told to leave is not passed on.
-        if (gone) return;
-        const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
-        const who = { steamid: null, discord: idOf(v), name: v.name };
-        for (const opus of [
-          .../** @type {Twenties} */ (packer).push(v.opus),
-          ...(v.last ? /** @type {Twenties} */ (packer).flush() : []),
-        ])
-          forwarder.frame(who, opus);
-      },
+      connect: this.o.connect,
+      onVoice: v => this.#voice(v),
       onGone: why => {
         // Only one that was in: a join that fails says so itself.
-        if (gone || !c.in) return;
-        gone = true;
-        timers.forEach(clearInterval);
-        status(`Left: ${why}`, []);
+        if (this.gone || !c.in) return;
+        this.gone = true;
+        this.timers.forEach(clearInterval);
+        this.status(`Left: ${why}`, []);
       },
     });
     return c;
-  };
-  /** @type {string | undefined} */
-  let address;
-  const started = (async () => {
-    try {
-      address = await addressOf(job.host, { lookup: o.lookup });
-      // A name in use (a match before this one, still leaving) is taken with a number.
-      const name = o.name ?? "stv.tf";
-      for (let n = 1; ; n++) {
-        if (gone) return;
-        client = connect(n === 1 ? name : `${name} ${n}`);
-        try {
-          await client.join();
-          break;
-        } catch (e) {
-          if (/** @type {any} */ (e).reject !== IN_USE || n >= NAMES) throw e;
-        }
-      }
-      if (gone) return void client.leave("disconnected");
-      client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
-      report();
-      timers.push(
-        setInterval(() => forwarder.flush(), FLUSH_MS),
-        setInterval(report, STATUS_MS),
-      );
-    } catch (e) {
-      gone = true;
-      // Told to leave, it has nothing more to say: another may be there by now.
-      if (!closing) status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
-    }
-  })();
-  return session;
+  }
+
+  /** @param {{ session: number; name: string; id: string; opus: Buffer; last: boolean }} v */
+  #voice(v) {
+    // What comes once told to leave is not passed on.
+    if (this.gone) return;
+    let packer = this.packers.get(v.session);
+    if (!packer) this.packers.set(v.session, (packer = new Twenties()));
+    const who = { steamid: null, discord: this.#idOf(v), name: v.name };
+    for (const opus of [...packer.push(v.opus), ...(v.last ? packer.flush() : [])]) this.forwarder.frame(who, opus);
+  }
 }

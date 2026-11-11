@@ -103,6 +103,25 @@ async function inChannel(i, here) {
   return mayControl(member?.voice.channelId, here.channel.id);
 }
 
+/**
+ * `/stv leave` and `/stv delay`: for those in the bot's channel only.
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {Channel | undefined} here
+ */
+async function control(i, here) {
+  if (!here) return reply(i, "Not in a channel.");
+  if (!(await inChannel(i, here))) return reply(i, NOT_IN);
+  if (i.options.getSubcommand() === "leave") {
+    here.leave(`/stv leave by ${i.user.displayName}`);
+    return reply(i, "Left.");
+  }
+  here.forwarder.delay = i.options.getNumber("delay", true);
+  const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
+  // Told where it is recorded, wherever the command was given.
+  if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
+    here.channel.send(quiet(said)).catch(() => {});
+  return i.reply(quiet(said));
+}
+
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand() || i.commandName !== "stv") return;
   const here = i.guild ? channels.get(i.guild.id) : undefined;
@@ -111,20 +130,8 @@ client.on("interactionCreate", async i => {
       case "join":
         return await join(i);
       case "leave":
-        if (!here) return await reply(i, "Not in a channel.");
-        if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
-        here.leave(`/stv leave by ${i.user.displayName}`);
-        return await reply(i, "Left.");
-      case "delay": {
-        if (!here) return await reply(i, "Not in a channel.");
-        if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
-        here.forwarder.delay = i.options.getNumber("delay", true);
-        const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
-        // Told where it is recorded, wherever the command was given.
-        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
-          here.channel.send(quiet(said)).catch(() => {});
-        return await i.reply(quiet(said));
-      }
+      case "delay":
+        return await control(i, here);
       case "link":
         return await reply(i, `Link Steam: ${homeOf(HOSTS)}/voice/link`);
     }

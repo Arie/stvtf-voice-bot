@@ -3,12 +3,7 @@
 // so frames are regrouped as they are, with no decoding: two of 10 ms become one packet of 20,
 // a packet of two of 20 ms comes apart. Only a single frame longer than 20 ms cannot be cut,
 // and passes whole.
-
-/** Milliseconds a frame of the kind `toc` names lasts. @param {number} toc */
-function frameMs(toc) {
-  const config = toc >> 3;
-  return config < 12 ? [10, 20, 40, 60][config & 3] : config < 16 ? [10, 20][config & 1] : [2.5, 5, 10, 20][config & 3];
-}
+import { frameMs } from "./voice.mjs";
 
 /** A frame's length where a packet says it. @returns {[number, number] | null} It, and where it ends. */
 function readLength(/** @type {Buffer} */ b, /** @type {number} */ at) {
@@ -25,27 +20,27 @@ export function framesOf(p) {
   if (!p.length) return [];
   const code = p[0] & 3;
   if (code === 0) return [p.subarray(1)];
-  if (code === 1)
-    return (p.length - 1) % 2 ? [] : [p.subarray(1, 1 + (p.length - 1) / 2), p.subarray(1 + (p.length - 1) / 2)];
+  if (code === 1) {
+    const half = (p.length - 1) / 2;
+    return Number.isInteger(half) ? [p.subarray(1, 1 + half), p.subarray(1 + half)] : [];
+  }
   if (code === 2) {
     const first = readLength(p, 1);
     return !first || first[1] + first[0] > p.length
       ? []
       : [p.subarray(first[1], first[1] + first[0]), p.subarray(first[1] + first[0])];
   }
+  return manyOf(p);
+}
+
+/** The frames of a packet of any number of them (code 3). @param {Buffer} p @returns {Buffer[]} */
+function manyOf(p) {
   if (p.length < 2) return [];
   const [vbr, padded, count] = [(p[1] & 0x80) !== 0, (p[1] & 0x40) !== 0, p[1] & 0x3f];
-  let [at, end] = [2, p.length];
-  if (padded) {
-    let pad = 0;
-    for (;;) {
-      if (at >= p.length) return [];
-      const b = p[at++];
-      pad += b === 255 ? 254 : b;
-      if (b !== 255) break;
-    }
-    end -= pad;
-  }
+  const pad = padded ? paddingOf(p) : { at: 2, pad: 0 };
+  if (!pad) return [];
+  let at = pad.at;
+  const end = p.length - pad.pad;
   if (!count || end < at) return [];
   const lengths = [];
   if (vbr) {
@@ -62,6 +57,20 @@ export function framesOf(p) {
   }
   if (lengths.some(l => l < 0)) return [];
   return lengths.map(l => p.subarray(at, (at += l)));
+}
+
+/**
+ * How much padding a packet of many frames has, and where its frames' lengths start.
+ * @param {Buffer} p @returns {{ at: number; pad: number } | null} None for one cut short.
+ */
+function paddingOf(p) {
+  let [at, pad] = [2, 0];
+  for (;;) {
+    if (at >= p.length) return null;
+    const b = p[at++];
+    pad += b === 255 ? 254 : b;
+    if (b !== 255) return { at, pad };
+  }
 }
 
 /** Frames of one kind as one packet. @param {number} kind The kind's byte, less its two last bits. @param {Buffer[]} frames */

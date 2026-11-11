@@ -66,6 +66,10 @@ export class MumbleClient {
     this.in = false;
     /** @type {(() => void) | null} Called once the server has moved it there. */
     this.moved = null;
+    /** Called once in the channel, and with why not; set by join(). */
+    this.joined = () => {};
+    /** @type {(why: string, type?: number) => void} */
+    this.fail = () => {};
     this.gone = false;
     /** @type {() => void} */
     this.wasClosed = () => {};
@@ -95,17 +99,13 @@ export class MumbleClient {
       };
       const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
       const done = () => clearTimeout(timer);
+      this.joined = () => (done(), resolve(undefined));
+      this.fail = (/** @type {string} */ why, /** @type {number | undefined} */ type) => (done(), fail(why, type));
       this.socket = connect();
       const frames = new Frames();
       this.socket.on("data", chunk => {
         try {
-          for (const m of frames.push(chunk))
-            this.#got(
-              m.type,
-              m.body,
-              () => (done(), resolve(undefined)),
-              (why, type) => (done(), fail(why, type)),
-            );
+          for (const m of frames.push(chunk)) this.#got(m.type, m.body);
         } catch (e) {
           done();
           fail("bad reply");
@@ -124,80 +124,97 @@ export class MumbleClient {
     if (!this.gone) this.socket?.write(frame(type, encode(type, message)));
   }
 
-  /**
-   * @param {string} type @param {Buffer} body @param {() => void} joined @param {(why: string, type?: number) => void} fail
-   */
-  #got(type, body, joined, fail) {
-    if (type === "UDPTunnel") {
-      const v = parseVoice(body);
-      const who = v && this.users.get(v.session);
-      // Talk to the channel only, from someone in it; never a whisper.
-      if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session)
-        this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
-      return;
-    }
+  /** @param {string} type @param {Buffer} body */
+  #got(type, body) {
+    if (type === "UDPTunnel") return this.#voice(body);
     const m = decode(type, body);
     switch (type) {
       case "Reject":
-        return fail(m.reason ?? "refused", m.type);
+        return this.fail(m.reason ?? "refused", m.type);
       case "ChannelState":
-        if (m.name == null) return;
-        if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
-          return fail("too many channels");
-        this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
-        return;
+        return this.#channelState(m);
       case "ChannelRemove":
-        this.channels.delete(m.channel_id);
-        return;
-      case "UserState": {
-        if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return fail("too many users");
-        const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
-        if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
-        if (m.channel_id != null) u.channel = m.channel_id;
-        // Who they are from one visit to the next: their certificate, the same on any server;
-        // else as registered on this one.
-        if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
-        else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
-        this.users.set(m.session, u);
-        if (m.session !== this.session) return;
-        if (this.moved && u.channel === this.channel) {
-          this.in = true;
-          this.moved();
-          this.moved = null;
-        } else if (this.in && u.channel !== this.channel) this.#end("moved");
-        return;
-      }
+        return void this.channels.delete(m.channel_id);
+      case "UserState":
+        return this.#userState(m);
       case "UserRemove":
-        this.users.delete(m.session);
-        if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
-        return;
-      case "ServerSync": {
-        this.session = m.session;
-        const want = this.o.channel.trim().toLowerCase();
-        const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
-        if (!found) return fail(`no channel "${this.o.channel}"`);
-        this.channel = found[0];
-        // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
-        // the server says it is there.
-        const there = this.users.get(this.session)?.channel === this.channel;
-        this.#send("UserState", {
-          session: this.session,
-          channel_id: there ? undefined : this.channel,
-          self_mute: true,
-          recording: true,
-        });
-        if (!there) return void (this.moved = joined);
-        this.in = true;
-        return joined();
-      }
+        return this.#userRemove(m);
+      case "ServerSync":
+        return this.#serverSync(m);
       case "PermissionDenied":
-        if (this.moved) return fail("move refused");
-        this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
-        return;
+        return this.#denied(m);
       case "TextMessage":
-        this.o.onText?.(this.users.get(m.actor), String(m.message ?? ""));
-        return;
+        return this.o.onText?.(this.users.get(m.actor), String(m.message ?? ""));
     }
+  }
+
+  /** @param {Buffer} body */
+  #voice(body) {
+    const v = parseVoice(body);
+    const who = v && this.users.get(v.session);
+    // Talk to the channel only, from someone in it; never a whisper.
+    if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session)
+      this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
+  }
+
+  /** @param {Record<string, any>} m */
+  #channelState(m) {
+    if (m.name == null) return;
+    if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
+      return this.fail("too many channels");
+    this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
+  }
+
+  /** @param {Record<string, any>} m */
+  #userState(m) {
+    if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return this.fail("too many users");
+    const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
+    if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
+    if (m.channel_id != null) u.channel = m.channel_id;
+    // Who they are from one visit to the next: their certificate, the same on any server;
+    // else as registered on this one.
+    if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
+    else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
+    this.users.set(m.session, u);
+    if (m.session !== this.session) return;
+    if (this.moved && u.channel === this.channel) {
+      this.in = true;
+      this.moved();
+      this.moved = null;
+    } else if (this.in && u.channel !== this.channel) this.#end("moved");
+  }
+
+  /** @param {Record<string, any>} m */
+  #userRemove(m) {
+    this.users.delete(m.session);
+    if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
+  }
+
+  /** Refused something: the move to its channel, or something said. @param {Record<string, any>} m */
+  #denied(m) {
+    if (this.moved) return this.fail("move refused");
+    this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
+  }
+
+  /** Signed in: to the channel. @param {Record<string, any>} m */
+  #serverSync(m) {
+    this.session = m.session;
+    const want = this.o.channel.trim().toLowerCase();
+    const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
+    if (!found) return this.fail(`no channel "${this.o.channel}"`);
+    this.channel = found[0];
+    // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
+    // the server says it is there.
+    const there = this.users.get(this.session)?.channel === this.channel;
+    this.#send("UserState", {
+      session: this.session,
+      channel_id: there ? undefined : this.channel,
+      self_mute: true,
+      recording: true,
+    });
+    if (!there) return void (this.moved = this.joined);
+    this.in = true;
+    this.joined();
   }
 
   /** Those in the bot's channel, itself aside. @returns {Person[]} */
