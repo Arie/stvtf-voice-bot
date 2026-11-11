@@ -4,14 +4,21 @@
   "type": "module",
   "description": "A Discord bot that sits in a voice channel and passes its speakers' voice to a match on stv.tf",
   "license": "MIT",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node src/bot.mjs",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "format": "prettier --write \"src/**/*.mjs\" \"test/**/*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.mjs\" \"test/**/*.mjs\""
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
     "discord.js": "14.28.1",
     "libsodium-wrappers": "^0.7.15"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }
