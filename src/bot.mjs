@@ -4,9 +4,10 @@
 //
 // Environment: DISCORD_TOKEN; STVTF_VOICE_KEY (the key stv.tf takes voice with); STVTF_HOSTS (the
 // stv.tf hosts voice may go to, comma separated; default the four regions).
-import { ChannelType, Client, GatewayIntentBits, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "discord.js";
 import { Channel } from "./channel.mjs";
-import { homeOf, matchOf } from "./match.mjs";
+import { join as joinChannel, reply } from "./join.mjs";
+import { homeOf } from "./match.mjs";
 import { Who } from "./who.mjs";
 import { mayControl } from "./control.mjs";
 import { Jobs } from "./mumble/jobs.mjs";
@@ -61,60 +62,17 @@ client.once("clientReady", async () => {
   console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${HOSTS.join(", ")}`);
 });
 
-/** @param {import("discord.js").ChatInputCommandInteraction} i @param {string} content */
-const reply = (i, content) => i.reply({ content, flags: MessageFlags.Ephemeral });
+/** @param {string} url Where to ask who someone is: one Who for each stv.tf. */
+const whoFor = url => {
+  const origin = new URL(url).origin;
+  let who = whos.get(origin);
+  if (!who) whos.set(origin, (who = new Who({ url, key: KEY })));
+  return who;
+};
 
 /** @param {import("discord.js").ChatInputCommandInteraction} i */
-async function join(i) {
-  const member = await i.guild?.members.fetch(i.user.id);
-  const voice = member?.voice.channel;
-  if (!voice || !i.guild) return reply(i, "Join a voice channel first.");
-  if (channels.has(i.guild.id) || joining.has(i.guild.id))
-    return reply(i, "Already in a channel. `/stv leave` first.");
-  const match = matchOf(i.options.getString("link", true), HOSTS);
-  if (!match) return reply(i, "Not a stv.tf link.");
-  if (!match.invite)
-    return reply(i, "No invite in that link. On the match page: 🔊 → Comms → Copy command.");
-  const delay = i.options.getNumber("delay") ?? DEFAULT_DELAY;
-  // Held from here on: a second join meanwhile is told so.
-  joining.add(i.guild.id);
-  await i.deferReply();
-  const origin = new URL(match.who).origin;
-  let who = whos.get(origin);
-  if (!who) whos.set(origin, (who = new Who({ url: match.who, key: KEY })));
-  const guildId = i.guild.id;
-  const channel = new Channel({
-    channel: voice,
-    match,
-    delay,
-    key: KEY,
-    who,
-    onGone: why => {
-      channels.delete(guildId);
-      i.guild?.members.me?.setNickname(null).catch(() => {});
-      if (voice.type === ChannelType.GuildVoice) voice.send(`Left: ${why}`).catch(() => {});
-    },
-  });
-  try {
-    await channel.join();
-  } catch {
-    joining.delete(guildId);
-    channel.leave("join failed");
-    return i.editReply("Can't join that channel.");
-  }
-  channels.set(guildId, channel);
-  joining.delete(guildId);
-  i.guild.members.me?.setNickname(NICK).catch(() => {});
-  const unlinked = await channel.unlinked();
-  await i.editReply(
-    [
-      `🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`,
-      unlinked.length ? `Not linked: ${unlinked.join(", ")} (\`/stv link\`)` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-  );
-}
+const join = i =>
+  joinChannel(i, { hosts: HOSTS, key: KEY, nick: NICK, defaultDelay: DEFAULT_DELAY, channels, joining, whoFor, makeChannel: o => new Channel(o) });
 
 const NOT_IN = "Join my voice channel first.";
 
