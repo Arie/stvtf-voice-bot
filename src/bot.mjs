@@ -9,6 +9,8 @@ import { Channel } from "./channel.mjs";
 import { homeOf, matchOf } from "./match.mjs";
 import { Who } from "./who.mjs";
 import { mayControl } from "./control.mjs";
+import { Jobs } from "./mumble/jobs.mjs";
+import { startSession } from "./mumble/session.mjs";
 
 const HOSTS = (process.env.STVTF_HOSTS ?? "stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf").split(",").map(h => h.trim());
 const KEY = process.env.STVTF_VOICE_KEY ?? "";
@@ -159,9 +161,14 @@ client.on("voiceStateUpdate", old => {
   if (here && !here.hasPeople()) here.leave("everyone left.");
 });
 
+// Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's page).
+const mumble = HOSTS.map(host => new Jobs({ origin: homeOf([host]), key: KEY, start: (job, status) => startSession(job, status, { key: KEY }) }));
+for (const jobs of mumble) jobs.run();
+
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {
     for (const c of channels.values()) c.leave("I am being restarted.");
+    for (const jobs of mumble) jobs.stop("I am being restarted.");
     await client.destroy();
     process.exit(0);
   });

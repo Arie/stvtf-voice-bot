@@ -34,6 +34,16 @@ runs the tests of the parts that do not need Discord. The first host is where pe
 and where the bot asks who they are, for matches on any of them: only it needs the Discord
 application; all share the voice key.
 
+## Mumble
+
+Teams on Mumble need no command: on the match's page on stv.tf, whoever started it (or a caster)
+gives the server's address, its password and the channel, and the bot joins there at once, marked
+as recording (Mumble's own sign), and says so in the channel. It works with any server it can
+reach with a password; one that only lets registered certificates in must let the bot's in.
+Speakers are known by who they are on that server, and put on players on the match's page.
+Whatever length of packet they send (10 to 60 ms) is regrouped into 20 ms without decoding.
+`STVTF_MUMBLE_ANYWHERE=1` lets it join a server on this machine or its network, for trying out.
+
 ## Deploying
 
 `config/deploy.yml` is the Kamal config: one container on the stv.tf host in Europe, no proxy
