@@ -26,23 +26,23 @@ if (!process.env.DISCORD_TOKEN || !KEY) {
 const delayOption = (/** @type {import("discord.js").SlashCommandNumberOption} */ o) =>
   o
     .setName("delay")
-    .setDescription(`Seconds the match's SourceTV is behind the game (tv_delay): ${DEFAULT_DELAY} unless said; 0 for live commentary`)
+    .setDescription(`tv_delay in seconds (default ${DEFAULT_DELAY}; 0 = live)`)
     .setMinValue(0)
     .setMaxValue(MAX_DELAY);
 
 const command = new SlashCommandBuilder()
   .setName("stv")
-  .setDescription("Your voice channel's comms in a match on stv.tf")
+  .setDescription("Voice comms for stv.tf")
   .addSubcommand(s =>
     s
       .setName("join")
-      .setDescription("Join your voice channel and pass what is said to a match on stv.tf")
-      .addStringOption(o => o.setName("link").setDescription("The link stv.tf gave for this match's Discord voice (its page, with the invite)").setRequired(true))
+      .setDescription("Record your voice channel for a match")
+      .addStringOption(o => o.setName("link").setDescription("Link from stv.tf (Comms → Copy command)").setRequired(true))
       .addNumberOption(delayOption),
   )
   .addSubcommand(s => s.setName("leave").setDescription("Leave the voice channel"))
-  .addSubcommand(s => s.setName("delay").setDescription("Change the delay as it goes").addNumberOption(o => delayOption(o).setRequired(true)))
-  .addSubcommand(s => s.setName("link").setDescription("Link your Steam account, so your voice is your player's"));
+  .addSubcommand(s => s.setName("delay").setDescription("Change tv_delay").addNumberOption(o => delayOption(o).setRequired(true)))
+  .addSubcommand(s => s.setName("link").setDescription("Link your Steam account"));
 
 /** @type {Map<string, Channel>} The channel the bot is in, by server. */
 const channels = new Map();
@@ -65,13 +65,13 @@ const reply = (i, content) => i.reply({ content, flags: MessageFlags.Ephemeral }
 async function join(i) {
   const member = await i.guild?.members.fetch(i.user.id);
   const voice = member?.voice.channel;
-  if (!voice || !i.guild) return reply(i, "Join a voice channel first: I come to the one you are in.");
+  if (!voice || !i.guild) return reply(i, "Join a voice channel first.");
   if (channels.has(i.guild.id) || joining.has(i.guild.id))
-    return reply(i, "I am already in a channel on this server: `/stv leave` first.");
+    return reply(i, "Already in a channel. `/stv leave` first.");
   const match = matchOf(i.options.getString("link", true), HOSTS);
-  if (!match) return reply(i, `That is not a match or room page on ${HOSTS[0]}.`);
+  if (!match) return reply(i, "Not a stv.tf link.");
   if (!match.invite)
-    return reply(i, "That link has no invite. Whoever started the match on stv.tf, or a caster, gets the `/stv join` command to paste here from the match's page (the 🔊 list, Discord voice).");
+    return reply(i, "No invite in that link. On the match page: 🔊 → Comms → Copy command.");
   const delay = i.options.getNumber("delay") ?? DEFAULT_DELAY;
   // Held from here on: a second join meanwhile is told so.
   joining.add(i.guild.id);
@@ -89,33 +89,31 @@ async function join(i) {
     onGone: why => {
       channels.delete(guildId);
       i.guild?.members.me?.setNickname(null).catch(() => {});
-      if (voice.type === ChannelType.GuildVoice) voice.send(`I have left: ${why}`).catch(() => {});
+      if (voice.type === ChannelType.GuildVoice) voice.send(`Left: ${why}`).catch(() => {});
     },
   });
   try {
     await channel.join();
   } catch {
     joining.delete(guildId);
-    channel.leave("I could not join the channel.");
-    return i.editReply("I could not join that channel (may I connect to it?).");
+    channel.leave("join failed");
+    return i.editReply("Can't join that channel.");
   }
   channels.set(guildId, channel);
   joining.delete(guildId);
   i.guild.members.me?.setNickname(NICK).catch(() => {});
   const unlinked = await channel.unlinked();
-  const how = delay ? `${delay} s behind, with the match's SourceTV` : "live, as commentary";
   await i.editReply(
     [
-      `🔴 **Recording this channel** for ${match.page}: what is said here is heard there by everyone watching, ${how}.`,
-      unlinked.length ? `Not linked to Steam yet (heard, but not as their player): ${unlinked.join(", ")}. Use \`/stv link\`.` : "",
-      "`/stv leave` stops it.",
+      `🔴 **Recording** for ${match.page} (${delay ? `tv_delay ${delay} s` : "live"}). \`/stv leave\` to stop.`,
+      unlinked.length ? `Not linked: ${unlinked.join(", ")} (\`/stv link\`)` : "",
     ]
       .filter(Boolean)
       .join("\n"),
   );
 }
 
-const NOT_IN = "Only those in the voice channel I am in do that.";
+const NOT_IN = "Join my voice channel first.";
 
 /**
  * Whether whoever gave the command is in the voice channel the bot is in.
@@ -134,21 +132,21 @@ client.on("interactionCreate", async i => {
       case "join":
         return await join(i);
       case "leave":
-        if (!here) return await reply(i, "I am not in a channel here.");
+        if (!here) return await reply(i, "Not in a channel.");
         if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
-        here.leave(`${i.user.displayName} asked me to.`);
+        here.leave(`/stv leave by ${i.user.displayName}`);
         return await reply(i, "Left.");
       case "delay": {
-        if (!here) return await reply(i, "I am not in a channel here.");
+        if (!here) return await reply(i, "Not in a channel.");
         if (!(await inChannel(i, here))) return await reply(i, NOT_IN);
         here.forwarder.delay = i.options.getNumber("delay", true);
-        const said = `${i.user.displayName} set the delay to ${here.forwarder.delay} s from now on${here.forwarder.delay ? "" : ": what is said here is heard **live**"}.`;
+        const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
         // Told where it is recorded, wherever the command was given.
         if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id) here.channel.send(said).catch(() => {});
         return await i.reply(said);
       }
       case "link":
-        return await reply(i, `Link your Steam account (through the one on your Discord profile): ${homeOf(HOSTS)}/voice/link`);
+        return await reply(i, `Link Steam: ${homeOf(HOSTS)}/voice/link`);
     }
   } catch (e) {
     console.error("stvtf-voice-bot:", e);
@@ -158,7 +156,7 @@ client.on("interactionCreate", async i => {
 // The channel emptied of people: nothing left to pass on.
 client.on("voiceStateUpdate", old => {
   const here = channels.get(old.guild.id);
-  if (here && !here.hasPeople()) here.leave("everyone left.");
+  if (here && !here.hasPeople()) here.leave("channel empty");
   // Someone came or went: stv.tf hears who is here now.
   else here?.report();
 });
@@ -169,8 +167,8 @@ for (const jobs of mumble) jobs.run();
 
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {
-    for (const c of channels.values()) c.leave("I am being restarted.");
-    for (const jobs of mumble) jobs.stop("I am being restarted.");
+    for (const c of channels.values()) c.leave("restarting");
+    for (const jobs of mumble) jobs.stop("restarting");
     await client.destroy();
     process.exit(0);
   });

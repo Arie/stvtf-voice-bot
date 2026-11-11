@@ -84,9 +84,9 @@ export class Forwarder {
         redirect: "error",
         body: JSON.stringify({ invite: this.invite, steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
       });
-      if (r.status === 404) return this.#stop("That match is no longer being watched.");
-      if (r.status === 401) return this.#stop("stv.tf refused the bot's key.");
-      if (r.status === 403) return this.#stop("that invite is not this match's (any more): ask for the command again.");
+      if (r.status === 404) return this.#stop("match ended");
+      if (r.status === 401) return this.#stop("key refused");
+      if (r.status === 403) return this.#stop("invite expired");
       if (r.ok) this.sent += b.frames.length;
       this.onSaid(`${r.status} ${await r.text()}`);
     } catch (e) {

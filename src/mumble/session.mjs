@@ -40,7 +40,7 @@ export function startSession(job, status, o) {
   const report = () => {
     const there = client?.people() ?? [];
     const n = there.length;
-    status(`In ${job.channel} on ${job.host} with ${n} ${n === 1 ? "person" : "people"}`, there.map(p => ({ id: idOf(p), name: p.name })));
+    status(`${job.channel} · ${n}`, there.map(p => ({ id: idOf(p), name: p.name })));
   };
   const session = {
     get delay() {
@@ -49,7 +49,7 @@ export function startSession(job, status, o) {
     set delay(d) {
       if (d === forwarder.delay) return;
       forwarder.delay = d;
-      client?.say(`The delay is ${d} s from now on${d ? "" : ": what is said here is heard live"}.`);
+      client?.say(`tv_delay: ${d} s${d ? "" : " (live)"}`);
     },
     /** @param {string} why */
     leave(why) {
@@ -58,7 +58,7 @@ export function startSession(job, status, o) {
       timers.forEach(clearInterval);
       forwarder.flush();
       try {
-        client?.say(`I am leaving: ${why}`);
+        client?.say(`Leaving: ${why}`);
       } catch {}
       // The goodbye gets a moment to go out.
       setTimeout(() => client?.leave(why), 200).unref();
@@ -67,7 +67,7 @@ export function startSession(job, status, o) {
   (async () => {
     try {
       const { address } = await dns.lookup(job.host);
-      if (!isPublic(address) && !ANYWHERE) throw new Error("that server is not out on the internet");
+      if (!isPublic(address) && !ANYWHERE) throw new Error("private address");
       client = new MumbleClient({
         host: job.host,
         port: job.port,
@@ -88,9 +88,8 @@ export function startSession(job, status, o) {
         },
       });
       await client.join();
-      if (gone) return client.leave("asked to leave meanwhile");
-      const how = job.delay ? `${job.delay} s behind, with the match's SourceTV` : "live";
-      client.say(`Recording this channel for ${job.page}: what is said here is heard there by everyone watching, ${how}.`);
+      if (gone) return client.leave("disconnected");
+      client.say(`Recording for ${job.page} (${job.delay ? `tv_delay ${job.delay} s` : "live"})`);
       report();
       timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));
     } catch (e) {

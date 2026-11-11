@@ -41,7 +41,7 @@ export class Channel {
       selfMute: true,
     });
     await entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
-    this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("I was disconnected from the channel."));
+    this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("disconnected"));
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
     this.report();
@@ -89,7 +89,7 @@ export class Channel {
   report() {
     if (this.gone) return;
     const people = [...this.channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }));
-    const status = `In ${this.channel.name} on ${this.channel.guild.name} with ${people.length} ${people.length === 1 ? "person" : "people"}`;
+    const status = `${this.channel.name} · ${people.length}`;
     tell({ page: this.o.match.page, key: this.o.key, invite: this.o.match.invite }, { kind: "discord", status, people });
   }
 

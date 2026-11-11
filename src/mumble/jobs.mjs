@@ -70,7 +70,7 @@ export class Jobs {
     for (const [match, had] of this.sessions) {
       const now = jobs.find(j => j.match === match);
       if (now && same(now) === had.same) continue;
-      had.session?.leave(now ? "I was asked to go elsewhere." : "I was asked to leave.");
+      had.session?.leave(now ? "moved" : "disconnected");
       this.sessions.delete(match);
     }
     for (const job of jobs) {

@@ -48,7 +48,7 @@ test("slow posts keep their order", async () => {
 });
 
 test("a match that is gone, or a refused key, stops it and says why", async () => {
-  for (const [status, why] of [[404, /no longer/], [401, /key/]]) {
+  for (const [status, why] of [[404, /ended/], [401, /key/]]) {
     const { posts, fetch } = fake(() => ({ status, text: "" }));
     let stopped = "";
     const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, onStop: w => (stopped = w) });

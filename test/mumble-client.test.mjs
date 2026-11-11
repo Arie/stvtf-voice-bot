@@ -70,7 +70,7 @@ test("a server that refuses, a channel that is not there, and a connection lost 
   const b = new MumbleClient({ host: "h", username: "stv.tf", channel: "Elsewhere", connect: nowhere.connect }).join();
   await tick();
   welcome(nowhere);
-  await assert.rejects(b, /no channel "Elsewhere".*Root, Team Comms/s);
+  await assert.rejects(b, /no channel "Elsewhere"/);
 
   const server = fake();
   let gone = "";

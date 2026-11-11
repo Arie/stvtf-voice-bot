@@ -48,7 +48,7 @@ export class MumbleClient {
         reject(new Error(why));
         this.#end(why);
       };
-      const timer = setTimeout(() => fail("the server did not let me in in time"), JOIN_MS).unref();
+      const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
       const done = () => clearTimeout(timer);
       this.socket = connect();
       const frames = new Frames();
@@ -57,11 +57,11 @@ export class MumbleClient {
           for (const m of frames.push(chunk)) this.#got(m.type, m.body, () => (done(), resolve(undefined)), why => (done(), fail(why)));
         } catch (e) {
           done();
-          fail(`the server sent what I cannot read (${/** @type {Error} */ (e).message})`);
+          fail("bad reply");
         }
       });
-      this.socket.on("error", e => (done(), fail(`the connection failed (${e.message})`)));
-      this.socket.on("close", () => (done(), fail("the connection closed")));
+      this.socket.on("error", e => (done(), fail(`connection failed (${e.message})`)));
+      this.socket.on("close", () => (done(), fail("connection closed")));
       this.#send("Version", { version_v1: VERSION, release: "stv.tf voice bot", os: "bot" });
       this.#send("Authenticate", { username: o.username, password: o.password, opus: true, client_type: BOT });
       this.stopPings = every(() => this.#send("Ping", { timestamp: Date.now() }), PING_MS);
@@ -86,7 +86,7 @@ export class MumbleClient {
     const m = decode(type, body);
     switch (type) {
       case "Reject":
-        return fail(`the server refused me: ${m.reason ?? "no reason given"}`);
+        return fail(m.reason ?? "refused");
       case "ChannelState":
         if (m.name != null) this.channels.set(m.channel_id ?? 0, m.name);
         return;
@@ -105,20 +105,20 @@ export class MumbleClient {
       }
       case "UserRemove":
         this.users.delete(m.session);
-        if (m.session === this.session) this.#end(`I was removed from the server${m.reason ? `: ${m.reason}` : ""}`);
+        if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
         return;
       case "ServerSync": {
         this.session = m.session;
         const want = this.o.channel.trim().toLowerCase();
         const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
-        if (!found) return fail(`there is no channel "${this.o.channel}" there (there are: ${[...this.channels.values()].join(", ")})`);
+        if (!found) return fail(`no channel "${this.o.channel}"`);
         this.channel = found[0];
         // Muted: it only listens. Not deafened: a deafened client is sent no voice.
         this.#send("UserState", { session: this.session, channel_id: this.channel, self_mute: true, recording: true });
         return joined();
       }
       case "PermissionDenied":
-        this.o.onText?.(undefined, `the server denied something: ${m.reason ?? `type ${m.type}`}`);
+        this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
         return;
       case "TextMessage":
         this.o.onText?.(this.users.get(m.actor), String(m.message ?? ""));
@@ -137,7 +137,7 @@ export class MumbleClient {
   }
 
   /** Leaves the server. @param {string} [why] */
-  leave(why = "I left") {
+  leave(why = "left") {
     this.#end(why);
   }
 
