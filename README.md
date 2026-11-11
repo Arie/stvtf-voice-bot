@@ -34,6 +34,16 @@ runs the tests of the parts that do not need Discord. The first host is where pe
 and where the bot asks who they are, for matches on any of them: only it needs the Discord
 application; all share the voice key.
 
+## Checks
+
+| command | |
+|---|---|
+| `script/test` | every check: eslint, prettier, tsc, shellcheck, hadolint, the tests and `npm audit` (`--help` for the rest) |
+| `script/test --fix` | fixes what eslint and prettier can, then checks |
+
+Before each commit, the quick ones (all but the audit), once enabled with
+`ln -s ../../.githooks/pre-commit .git/hooks/pre-commit`.
+
 ## Mumble
 
 Teams on Mumble need no command: on the match's page on stv.tf, whoever started it (or a caster)
