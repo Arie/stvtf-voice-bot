@@ -9,9 +9,9 @@
   },
   "scripts": {
     "start": "node src/bot.mjs",
-    "lint": "eslint src test",
-    "format": "prettier --write \"src/**/*.mjs\" \"test/**/*.mjs\" eslint.config.mjs",
-    "format:check": "prettier --check \"src/**/*.mjs\" \"test/**/*.mjs\" eslint.config.mjs",
+    "lint": "eslint src test script",
+    "format": "prettier --write \"src/**/*.mjs\" \"test/**/*.mjs\" \"script/**/*.mjs\" eslint.config.mjs",
+    "format:check": "prettier --check \"src/**/*.mjs\" \"test/**/*.mjs\" \"script/**/*.mjs\" eslint.config.mjs",
     "typecheck": "tsc -p .",
     "test": "node --test \"test/*.test.mjs\""
   },

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the quick checks before each commit, in parallel: all but npm audit (it fetches the advisory database).
+# Enable once per clone with: ln -s ../../.githooks/pre-commit .git/hooks/pre-commit
+exec "$(git rev-parse --show-toplevel)/script/test" --parallel --skip npm-audit
