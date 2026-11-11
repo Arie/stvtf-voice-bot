@@ -6,7 +6,10 @@ import { Channel } from "../src/channel.mjs";
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */
 function world() {
   const member = (id, name, bot = false) => ({ id, displayName: name, user: { bot } });
-  const members = new Map([["1", member("1", "arie")], ["bot", member("bot", "stv.tf", true)]]);
+  const members = new Map([
+    ["1", member("1", "arie")],
+    ["bot", member("bot", "stv.tf", true)],
+  ]);
   const guild = { id: "g", name: "G", voiceAdapterCreator: {}, members: { cache: members, me: members.get("bot") } };
   const channel = { id: "42", name: "General", type: 2, guild, members };
   const connection = Object.assign(new EventEmitter(), {
@@ -17,7 +20,10 @@ function world() {
     },
   });
   const told = [];
-  const fetch = async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" });
+  const fetch = async (url, init) => (
+    told.push(JSON.parse(init.body)),
+    { ok: true, status: 204, text: async () => "" }
+  );
   const gone = [];
   const c = new Channel({
     channel,
@@ -49,7 +55,13 @@ test("what stv.tf is told says which channel it is of", async () => {
   await w.c.join();
   w.c.leave("done");
   await new Promise(r => setImmediate(r));
-  assert.deepEqual(w.told.map(t => [t.status ?? "left", t.channel]), [["General · 1", "42"], ["left", "42"]]);
+  assert.deepEqual(
+    w.told.map(t => [t.status ?? "left", t.channel]),
+    [
+      ["General · 1", "42"],
+      ["left", "42"],
+    ],
+  );
 });
 
 test("dragged to another channel, it leaves rather than record there", async () => {

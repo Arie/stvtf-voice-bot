@@ -20,7 +20,9 @@ const ASK_MS = 40_000,
 function bytes6(ip) {
   // One that ends in IPv4's form: those four bytes as two groups.
   const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
-  const text = v4 ? ip.slice(0, v4.index) + ((+v4[1] << 8) | +v4[2]).toString(16) + ":" + ((+v4[3] << 8) | +v4[4]).toString(16) : ip;
+  const text = v4
+    ? ip.slice(0, v4.index) + ((+v4[1] << 8) | +v4[2]).toString(16) + ":" + ((+v4[3] << 8) | +v4[4]).toString(16)
+    : ip;
   const [l, r] = text.split("::");
   const left = l ? l.split(":") : [],
     right = r ? r.split(":") : [];
@@ -33,8 +35,16 @@ export function isPublic(ip) {
   if (net.isIPv4(ip)) {
     const [a, b, c] = ip.split(".").map(Number);
     return !(
-      a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b < 128) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && c === 0) || a >= 224
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b < 32) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b < 128) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 192 && b === 0 && c === 0) ||
+      a >= 224
     );
   }
   if (!net.isIPv6(ip)) return false;
@@ -53,7 +63,10 @@ export const channelOf = j => `mumble:${j.host}:${j.channel.replace(/[^A-Za-z0-9
 
 /** Whether stv.tf's answer holds a job the bot can do. @param {any} j @returns {j is Job} */
 const whole = j =>
-  j != null && typeof j === "object" && ["match", "host", "channel"].every(k => typeof j[k] === "string" && j[k]) && Number.isInteger(j.port);
+  j != null &&
+  typeof j === "object" &&
+  ["match", "host", "channel"].every(k => typeof j[k] === "string" && j[k]) &&
+  Number.isInteger(j.port);
 
 /** What makes a job another one: all but its delay. @param {Job} j */
 const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
@@ -113,7 +126,12 @@ export class Jobs {
         continue;
       }
       const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
-        this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) }));
+        this.telling.push(
+          tell(
+            { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
+            { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) },
+          ),
+        );
       /** @type {Entry} */
       const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
       const begin = () => {

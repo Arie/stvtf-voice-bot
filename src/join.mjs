@@ -28,12 +28,10 @@ export async function join(i, o) {
   const member = await i.guild?.members.fetch(i.user.id);
   const voice = member?.voice.channel;
   if (!voice || !i.guild) return reply(i, "Join a voice channel first.");
-  if (channels.has(i.guild.id) || joining.has(i.guild.id))
-    return reply(i, "Already in a channel. `/stv leave` first.");
+  if (channels.has(i.guild.id) || joining.has(i.guild.id)) return reply(i, "Already in a channel. `/stv leave` first.");
   const match = matchOf(i.options.getString("link", true), o.hosts);
   if (!match) return reply(i, "Not a stv.tf link.");
-  if (!match.invite)
-    return reply(i, "No invite in that link. On the match page: 🔊 → Comms → Copy command.");
+  if (!match.invite) return reply(i, "No invite in that link. On the match page: 🔊 → Comms → Copy command.");
   const delay = i.options.getNumber("delay") ?? o.defaultDelay;
   const guildId = i.guild.id;
   // Held from here on, until it is in or not: a second join meanwhile is told so.
@@ -73,7 +71,9 @@ async function joinIn(i, o, voice, match, delay) {
   o.channels.set(guild.id, channel);
   guild.members.me?.setNickname(o.nick).catch(() => {});
   // Said at once, as it is recording already; who has no link (a question per person) after.
-  await i.editReply(said(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`));
+  await i.editReply(
+    said(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`),
+  );
   const unlinked = await channel.unlinked();
   if (unlinked.length) await i.followUp(said(`Not linked: ${unlinked.join(", ")} (\`/stv link\`)`));
 }

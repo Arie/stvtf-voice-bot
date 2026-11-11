@@ -81,7 +81,13 @@ export class MumbleClient {
     const o = this.o;
     const connect = o.connect ?? (() => tls.connect(tlsOptions(o)));
     // Neither timer keeps the process going by itself.
-    const every = o.every ?? ((f, ms) => (t => () => clearInterval(t))(setInterval(f, ms).unref()));
+    const every =
+      o.every ??
+      ((f, ms) =>
+        (
+          t => () =>
+            clearInterval(t)
+        )(setInterval(f, ms).unref()));
     return new Promise((resolve, reject) => {
       const fail = (/** @type {string} */ why, /** @type {number | undefined} */ type) => {
         reject(Object.assign(new Error(why), { reject: type }));
@@ -93,7 +99,13 @@ export class MumbleClient {
       const frames = new Frames();
       this.socket.on("data", chunk => {
         try {
-          for (const m of frames.push(chunk)) this.#got(m.type, m.body, () => (done(), resolve(undefined)), (why, type) => (done(), fail(why, type)));
+          for (const m of frames.push(chunk))
+            this.#got(
+              m.type,
+              m.body,
+              () => (done(), resolve(undefined)),
+              (why, type) => (done(), fail(why, type)),
+            );
         } catch (e) {
           done();
           fail("bad reply");
@@ -120,7 +132,8 @@ export class MumbleClient {
       const v = parseVoice(body);
       const who = v && this.users.get(v.session);
       // Talk to the channel only, from someone in it; never a whisper.
-      if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session) this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
+      if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session)
+        this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
       return;
     }
     const m = decode(type, body);
@@ -129,7 +142,8 @@ export class MumbleClient {
         return fail(m.reason ?? "refused", m.type);
       case "ChannelState":
         if (m.name == null) return;
-        if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS) return fail("too many channels");
+        if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
+          return fail("too many channels");
         this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
         return;
       case "ChannelRemove":
@@ -166,7 +180,12 @@ export class MumbleClient {
         // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
         // the server says it is there.
         const there = this.users.get(this.session)?.channel === this.channel;
-        this.#send("UserState", { session: this.session, channel_id: there ? undefined : this.channel, self_mute: true, recording: true });
+        this.#send("UserState", {
+          session: this.session,
+          channel_id: there ? undefined : this.channel,
+          self_mute: true,
+          recording: true,
+        });
         if (!there) return void (this.moved = joined);
         this.in = true;
         return joined();

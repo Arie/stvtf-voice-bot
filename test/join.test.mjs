@@ -8,7 +8,10 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
   const voice = { id: "42", type: 2, send: async m => (said.push(["channel", m]), {}) };
   const i = {
     user: { id: "1", displayName: "arie" },
-    guild: { id: "g", members: { fetch: async () => ({ voice: { channel: voice } }), me: { setNickname: async () => {} } } },
+    guild: {
+      id: "g",
+      members: { fetch: async () => ({ voice: { channel: voice } }), me: { setNickname: async () => {} } },
+    },
     options: { getString: () => "https://stv.tf/w/abc/?voice=0123456789abcdef", getNumber: () => null },
     reply: async m => said.push(["reply", m]),
     deferReply,
@@ -18,9 +21,15 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
   /** @type {any} */
   let made = null;
   const o = {
-    hosts: ["stv.tf"], key: "k", nick: "stv.tf", defaultDelay: 90,
-    channels: new Map(), joining: new Set(), whoFor: () => ({}),
-    makeChannel: c => (made = { o: c, join: async () => {}, leave: () => {}, unlinked: () => (said.push(["asked"]), unlinked()) }),
+    hosts: ["stv.tf"],
+    key: "k",
+    nick: "stv.tf",
+    defaultDelay: 90,
+    channels: new Map(),
+    joining: new Set(),
+    whoFor: () => ({}),
+    makeChannel: c =>
+      (made = { o: c, join: async () => {}, leave: () => {}, unlinked: () => (said.push(["asked"]), unlinked()) }),
   };
   return { i, o, said, made: () => made };
 }
@@ -38,13 +47,20 @@ test("it says it is recording before it knows who is not linked, then says that"
 });
 
 test("however a join ends, the server can be joined again", async () => {
-  for (const over of [{ deferReply: async () => Promise.reject(new Error("gone")) }, { unlinked: async () => Promise.reject(new Error("down")) }]) {
+  for (const over of [
+    { deferReply: async () => Promise.reject(new Error("gone")) },
+    { unlinked: async () => Promise.reject(new Error("down")) },
+  ]) {
     const w = world(over);
     await join(w.i, w.o).catch(() => {});
     assert.equal(w.o.joining.size, 0);
   }
   const w = world();
-  w.o.makeChannel = () => ({ join: async () => Promise.reject(new Error("no")), leave: () => {}, unlinked: async () => [] });
+  w.o.makeChannel = () => ({
+    join: async () => Promise.reject(new Error("no")),
+    leave: () => {},
+    unlinked: async () => [],
+  });
   await join(w.i, w.o);
   assert.equal(w.o.joining.size, 0);
 });
@@ -54,5 +70,6 @@ test("what it says in a channel mentions nobody, whatever names are in it", asyn
   await join(w.i, w.o);
   w.made().o.onGone("/stv leave by @everyone");
   await new Promise(r => setImmediate(r));
-  for (const kind of ["follow", "channel"]) assert.deepEqual(w.said.find(s => s[0] === kind)?.[1].allowedMentions, { parse: [] }, kind);
+  for (const kind of ["follow", "channel"])
+    assert.deepEqual(w.said.find(s => s[0] === kind)?.[1].allowedMentions, { parse: [] }, kind);
 });

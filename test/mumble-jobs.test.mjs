@@ -3,7 +3,16 @@ import { test } from "node:test";
 import { Jobs, isPublic } from "../src/mumble/jobs.mjs";
 
 const tick = () => new Promise(r => setImmediate(r));
-const job = (over = {}) => ({ match: "m1", invite: "inv", host: "mumble.example", port: 64738, password: "pw", channel: "Team A", delay: 90, ...over });
+const job = (over = {}) => ({
+  match: "m1",
+  invite: "inv",
+  host: "mumble.example",
+  port: 64738,
+  password: "pw",
+  channel: "Team A",
+  delay: 90,
+  ...over,
+});
 
 /** A made-up stv.tf (what it wants, what it was told) and made-up Mumble sessions. */
 function world() {
@@ -60,11 +69,17 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
   w.wanted = [job({ channel: "Team B" })];
   await jobs.once();
   await tick();
-  assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
+  assert.deepEqual(
+    w.left.map(l => l.slice(0, 2)),
+    [["m1", "Team A"]],
+  );
   assert.equal(w.started.at(-1).job.channel, "Team B");
   w.wanted = [];
   await jobs.once();
-  assert.deepEqual(w.left.map(l => l[1]), ["Team A", "Team B"]);
+  assert.deepEqual(
+    w.left.map(l => l[1]),
+    ["Team A", "Team B"],
+  );
 });
 
 test("stv.tf not answering sends nobody away", async () => {
@@ -92,7 +107,19 @@ test("a server that cannot be joined is said so, and not tried over and over", a
 
 test("only servers out on the internet are joined", () => {
   for (const ip of ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"]) assert.equal(isPublic(ip), true, ip);
-  for (const ip of ["127.0.0.1", "10.1.2.3", "192.168.1.12", "172.16.0.1", "169.254.1.1", "100.64.0.1", "0.0.0.0", "::1", "fe80::1", "fd00::1", "::ffff:10.0.0.1"])
+  for (const ip of [
+    "127.0.0.1",
+    "10.1.2.3",
+    "192.168.1.12",
+    "172.16.0.1",
+    "169.254.1.1",
+    "100.64.0.1",
+    "0.0.0.0",
+    "::1",
+    "fe80::1",
+    "fd00::1",
+    "::ffff:10.0.0.1",
+  ])
     assert.equal(isPublic(ip), false, ip);
 });
 
@@ -104,14 +131,30 @@ test("the same channel asked for anew is left and joined again", async () => {
   w.wanted = [job({ asked: 2 })];
   await jobs.once();
   await tick();
-  assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
+  assert.deepEqual(
+    w.left.map(l => l.slice(0, 2)),
+    [["m1", "Team A"]],
+  );
   assert.equal(w.started.length, 2);
 });
 
 test("nor any range that leads back in: benchmarking, IETF, NAT64, 6to4, IPv4 in IPv6 however written", () => {
-  for (const ip of ["198.18.0.1", "198.19.255.1", "192.0.0.8", "64:ff9b::a00:1", "64:ff9b::808:808", "2002:a00:1::1", "::ffff:a00:1", "::ffff:127.0.0.1", "0:0:0:0:0:ffff:7f00:1", "::127.0.0.1", "::"])
+  for (const ip of [
+    "198.18.0.1",
+    "198.19.255.1",
+    "192.0.0.8",
+    "64:ff9b::a00:1",
+    "64:ff9b::808:808",
+    "2002:a00:1::1",
+    "::ffff:a00:1",
+    "::ffff:127.0.0.1",
+    "0:0:0:0:0:ffff:7f00:1",
+    "::127.0.0.1",
+    "::",
+  ])
     assert.equal(isPublic(ip), false, ip);
-  for (const ip of ["198.20.0.1", "192.0.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888"]) assert.equal(isPublic(ip), true, ip);
+  for (const ip of ["198.20.0.1", "192.0.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888"])
+    assert.equal(isPublic(ip), true, ip);
 });
 
 test("whatever stv.tf answers, it keeps asking", async () => {
@@ -130,7 +173,10 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   /** @type {() => void} */
   let closed = () => {};
   const start = w.start;
-  w.start = (j, status) => Object.assign(start(j, status), { leave: why => (w.left.push([j.match, j.channel, why]), new Promise(r => (closed = r))) });
+  w.start = (j, status) =>
+    Object.assign(start(j, status), {
+      leave: why => (w.left.push([j.match, j.channel, why]), new Promise(r => (closed = r))),
+    });
   const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
   await jobs.once();
   w.wanted = [job({ channel: "Team B" })];
@@ -140,7 +186,13 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   await jobs.once();
   closed();
   await new Promise(r => setImmediate(r));
-  assert.deepEqual(w.started.map(s => [s.job.channel, s.delay]), [["Team A", 90], ["Team B", 5]]);
+  assert.deepEqual(
+    w.started.map(s => [s.job.channel, s.delay]),
+    [
+      ["Team A", 90],
+      ["Team B", 5],
+    ],
+  );
 });
 
 test("what the page is told says which ask, and which channel, it is of", async () => {

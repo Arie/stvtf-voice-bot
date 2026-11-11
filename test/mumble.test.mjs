@@ -8,11 +8,19 @@ test("messages are written and read back as Mumble has them", () => {
   assert.deepEqual(decode("Authenticate", auth), { username: "stv.tf", password: "pw", opus: true, client_type: 1 });
   // Field 1, a string of 6: as any protobuf writer has it.
   assert.deepEqual([...auth.subarray(0, 8)], [0x0a, 6, ...Buffer.from("stv.tf")]);
-  const state = decode("UserState", encode("UserState", { session: 300, name: "Ärie", channel_id: 5, self_mute: true, recording: true }));
+  const state = decode(
+    "UserState",
+    encode("UserState", { session: 300, name: "Ärie", channel_id: 5, self_mute: true, recording: true }),
+  );
   assert.deepEqual(state, { session: 300, name: "Ärie", channel_id: 5, self_mute: true, recording: true });
-  assert.deepEqual(decode("TextMessage", encode("TextMessage", { channel_id: [5, 6], message: "hi" })), { channel_id: [5, 6], message: "hi" });
+  assert.deepEqual(decode("TextMessage", encode("TextMessage", { channel_id: [5, 6], message: "hi" })), {
+    channel_id: [5, 6],
+    message: "hi",
+  });
   // What we know nothing of is passed over.
-  assert.deepEqual(decode("Ping", Buffer.concat([encode("Ping", { timestamp: 7 }), Buffer.from([0xf8, 0x07, 0x01])])), { timestamp: 7 });
+  assert.deepEqual(decode("Ping", Buffer.concat([encode("Ping", { timestamp: 7 }), Buffer.from([0xf8, 0x07, 0x01])])), {
+    timestamp: 7,
+  });
 });
 
 test("the connection is cut into messages: a type, a length, the rest, however it arrives", () => {
@@ -22,7 +30,13 @@ test("the connection is cut into messages: a type, a length, the rest, however i
   const frames = new Frames();
   const all = Buffer.concat([a, b]);
   const got = [...frames.push(all.subarray(0, 3)), ...frames.push(all.subarray(3, 9)), ...frames.push(all.subarray(9))];
-  assert.deepEqual(got.map(m => [m.type, [...m.body]]), [["Ping", [8, 1]], ["UDPTunnel", [1, 2, 3]]]);
+  assert.deepEqual(
+    got.map(m => [m.type, [...m.body]]),
+    [
+      ["Ping", [8, 1]],
+      ["UDPTunnel", [1, 2, 3]],
+    ],
+  );
 });
 
 test("numbers in voice packets are Mumble's own, of one to nine bytes", () => {
@@ -69,5 +83,8 @@ test("a message of more than a server needs ends it; one coming a byte at a time
   const got = [];
   for (let i = 0; i < big.length; i++) got.push(...frames.push(big.subarray(i, i + 1)));
   assert.ok(performance.now() - started < 1000, `${performance.now() - started} ms`);
-  assert.deepEqual(got.map(m => m.body.length), [200_000]);
+  assert.deepEqual(
+    got.map(m => m.body.length),
+    [200_000],
+  );
 });

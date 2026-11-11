@@ -41,4 +41,3 @@ export function welcomeIn(server) {
   welcome(server);
   server.send("UserState", { session: 2, actor: 2, channel_id: 5, recording: true });
 }
-

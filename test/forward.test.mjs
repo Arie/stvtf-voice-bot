@@ -21,9 +21,18 @@ test("frames go five at a time, in order, with the speaker, the delay and the ke
   const f = new Forwarder({ url: "https://stv.tf/w/x/voice", key: "k", delay: 90, fetch });
   for (let i = 0; i < 12; i++) f.frame(speaker, Buffer.from([i]));
   await f.flush();
-  assert.deepEqual(posts.map(p => p.body.frames.length), [5, 5, 2]);
-  assert.deepEqual(posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]), [...Array(12).keys()]);
-  assert.deepEqual([posts[0].auth, posts[0].body.steamid, posts[0].body.delay, posts[0].url], ["Bearer k", "[U:1:5]", 90, "https://stv.tf/w/x/voice"]);
+  assert.deepEqual(
+    posts.map(p => p.body.frames.length),
+    [5, 5, 2],
+  );
+  assert.deepEqual(
+    posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]),
+    [...Array(12).keys()],
+  );
+  assert.deepEqual(
+    [posts[0].auth, posts[0].body.steamid, posts[0].body.delay, posts[0].url],
+    ["Bearer k", "[U:1:5]", 90, "https://stv.tf/w/x/voice"],
+  );
 });
 
 test("each speaker has batches of their own", async () => {
@@ -44,11 +53,17 @@ test("slow posts keep their order", async () => {
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 10; i++) f.frame(speaker, Buffer.from([i]));
   await f.flush();
-  assert.deepEqual(posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]), [...Array(10).keys()]);
+  assert.deepEqual(
+    posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]),
+    [...Array(10).keys()],
+  );
 });
 
 test("a match that is gone, or a refused key, stops it and says why", async () => {
-  for (const [status, why] of [[404, /ended/], [401, /key/]]) {
+  for (const [status, why] of [
+    [404, /ended/],
+    [401, /key/],
+  ]) {
     const { posts, fetch } = fake(() => ({ status, text: "" }));
     let stopped = "";
     const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, onStop: w => (stopped = w) });
@@ -77,7 +92,10 @@ test("the delay can change as it goes", async () => {
   f.delay = 0;
   f.frame(speaker, Buffer.from([2]));
   await f.flush();
-  assert.deepEqual(posts.map(p => p.body.delay), [90, 0]);
+  assert.deepEqual(
+    posts.map(p => p.body.delay),
+    [90, 0],
+  );
 });
 
 test("posts say which voice channel the speaker is in", async () => {
@@ -108,8 +126,14 @@ test("what waits behind a slow post goes as one post a speaker, and a post has a
   await new Promise(r => setImmediate(r));
   answers[1]();
   await done;
-  assert.deepEqual(posts.map(p => p.body.frames.length), [5, 15]);
-  assert.deepEqual(posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]), [...Array(20).keys()]);
+  assert.deepEqual(
+    posts.map(p => p.body.frames.length),
+    [5, 15],
+  );
+  assert.deepEqual(
+    posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]),
+    [...Array(20).keys()],
+  );
 });
 
 test("posts carry the invite, and a refused one stops it", async () => {
@@ -127,7 +151,10 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   /** @type {(() => void)[]} */
   const answers = [];
   let posts = 0;
-  const fetch = () => (posts++, new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" }))));
+  const fetch = () => (
+    posts++,
+    new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" })))
+  );
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
   await new Promise(r => setImmediate(r));

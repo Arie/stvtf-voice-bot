@@ -5,22 +5,42 @@ import { fake, tick, welcome, welcomeIn } from "./fake-mumble.mjs";
 
 test("it signs in as a bot, goes to the channel, and says it is recording", async () => {
   const server = fake();
-  const client = new MumbleClient({ host: "h", username: "stv.tf", password: "pw", channel: "team comms", connect: server.connect });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    password: "pw",
+    channel: "team comms",
+    connect: server.connect,
+  });
   const joined = client.join();
   await tick();
-  assert.deepEqual(server.sent("Version")[0].version_v1, (1 << 16) | (4 << 8), "of before 1.5: the server sends voice the older way");
+  assert.deepEqual(
+    server.sent("Version")[0].version_v1,
+    (1 << 16) | (4 << 8),
+    "of before 1.5: the server sends voice the older way",
+  );
   assert.deepEqual(server.sent("Authenticate"), [{ username: "stv.tf", password: "pw", opus: true, client_type: 1 }]);
   welcomeIn(server);
   await joined;
   assert.deepEqual(server.sent("UserState"), [{ session: 2, channel_id: 5, self_mute: true, recording: true }]);
-  assert.deepEqual(client.people().map(p => p.name), ["arie"], "those in its channel, itself aside");
+  assert.deepEqual(
+    client.people().map(p => p.name),
+    ["arie"],
+    "those in its channel, itself aside",
+  );
 });
 
 test("each speaker's Opus is handed on with who they are", async () => {
   const server = fake();
   /** @type {any[]} */
   const heard = [];
-  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, onVoice: v => heard.push(v) });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: server.connect,
+    onVoice: v => heard.push(v),
+  });
   const joined = client.join();
   await tick();
   welcomeIn(server);
@@ -29,7 +49,11 @@ test("each speaker's Opus is handed on with who they are", async () => {
   server.send("UDPTunnel", Buffer.from([0x80, 9, 0, 0xa0, 3, ...opus]));
   server.send("UDPTunnel", Buffer.from([0x80, 44, 0, 3, ...opus]));
   await tick();
-  assert.deepEqual(heard, [{ session: 9, name: "arie", id: "cert:abc", opus, last: true }], "someone it knows nothing of is not passed on");
+  assert.deepEqual(
+    heard,
+    [{ session: 9, name: "arie", id: "cert:abc", opus, last: true }],
+    "someone it knows nothing of is not passed on",
+  );
 });
 
 test("a server that refuses, a channel that is not there, and a connection lost are said", async () => {
@@ -47,7 +71,13 @@ test("a server that refuses, a channel that is not there, and a connection lost 
 
   const server = fake();
   let gone = "";
-  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, onGone: why => (gone = why) });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: server.connect,
+    onGone: why => (gone = why),
+  });
   const joined = client.join();
   await tick();
   welcomeIn(server);
@@ -61,7 +91,13 @@ test("it tells the channel things, and pings so the server keeps it", async () =
   const server = fake();
   /** @type {(() => void)[]} */
   const timers = [];
-  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, every: f => (timers.push(f), () => {}) });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: server.connect,
+    every: f => (timers.push(f), () => {}),
+  });
   const joined = client.join();
   await tick();
   welcomeIn(server);
@@ -82,7 +118,13 @@ test("someone is their certificate wherever they talk, else who they are on that
 test("names are kept short, and a server of more people or channels than any has is left", async () => {
   const server = fake();
   let gone = "";
-  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, onGone: why => (gone = why) });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: server.connect,
+    onGone: why => (gone = why),
+  });
   const joined = client.join();
   await tick();
   welcomeIn(server);
@@ -101,7 +143,13 @@ test("names are kept short, and a server of more people or channels than any has
 
   const other = fake();
   let left = "";
-  const c2 = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: other.connect, onGone: why => (left = why) });
+  const c2 = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: other.connect,
+    onGone: why => (left = why),
+  });
   const j2 = c2.join();
   await tick();
   for (let i = 0; i < 6000; i++) other.send("ChannelState", { channel_id: i, name: "c" });
@@ -125,7 +173,12 @@ test("it is in the channel only once the server says so: a move refused, or late
   await joining;
 
   const refusing = fake();
-  const a = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: refusing.connect }).join();
+  const a = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: refusing.connect,
+  }).join();
   await tick();
   welcome(refusing);
   refusing.send("PermissionDenied", { type: 1, reason: "no" });
@@ -133,7 +186,13 @@ test("it is in the channel only once the server says so: a move refused, or late
 
   const mover = fake();
   let gone = "";
-  const b = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: mover.connect, onGone: why => (gone = why) });
+  const b = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: mover.connect,
+    onGone: why => (gone = why),
+  });
   const bj = b.join();
   await tick();
   welcomeIn(mover);
@@ -157,7 +216,13 @@ test("only talk to the channel, from those in it, is handed on: no whispers, sho
   const server = fake();
   /** @type {any[]} */
   const heard = [];
-  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, onVoice: v => heard.push(v.session) });
+  const client = new MumbleClient({
+    host: "h",
+    username: "stv.tf",
+    channel: "Team Comms",
+    connect: server.connect,
+    onVoice: v => heard.push(v.session),
+  });
   const joined = client.join();
   await tick();
   welcome(server);
@@ -167,7 +232,15 @@ test("only talk to the channel, from those in it, is handed on: no whispers, sho
   server.send("UserState", { session: 2, channel_id: 5 });
   await joined;
   server.send("UserState", { session: 7, name: "elsewhere", channel_id: 0 });
-  for (const [type, session] of [[0x80, 9], [0x81, 9], [0x82, 9], [0x9e, 9], [0x9f, 9], [0x80, 7]]) server.send("UDPTunnel", Buffer.from([type, session, 0, 3, 0x78, 1, 2]));
+  for (const [type, session] of [
+    [0x80, 9],
+    [0x81, 9],
+    [0x82, 9],
+    [0x9e, 9],
+    [0x9f, 9],
+    [0x80, 7],
+  ])
+    server.send("UDPTunnel", Buffer.from([type, session, 0, 3, 0x78, 1, 2]));
   await tick();
   assert.deepEqual(heard, [9]);
 });

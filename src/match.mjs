@@ -29,5 +29,10 @@ export function matchOf(link, hosts) {
   const page = `${url.origin}/${m[1]}/${m[2]}/`;
   // The invite stv.tf gave whoever started the match, or a caster: no voice comes in without it.
   const invite = url.searchParams.get("voice");
-  return { voice: `${page}voice`, who: `${homeOf(hosts)}/voice/who`, page, invite: invite && /^[0-9a-f]{8,64}$/.test(invite) ? invite : null };
+  return {
+    voice: `${page}voice`,
+    who: `${homeOf(hosts)}/voice/who`,
+    page,
+    invite: invite && /^[0-9a-f]{8,64}$/.test(invite) ? invite : null,
+  };
 }

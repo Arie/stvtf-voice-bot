@@ -25,10 +25,13 @@ export function framesOf(p) {
   if (!p.length) return [];
   const code = p[0] & 3;
   if (code === 0) return [p.subarray(1)];
-  if (code === 1) return (p.length - 1) % 2 ? [] : [p.subarray(1, 1 + (p.length - 1) / 2), p.subarray(1 + (p.length - 1) / 2)];
+  if (code === 1)
+    return (p.length - 1) % 2 ? [] : [p.subarray(1, 1 + (p.length - 1) / 2), p.subarray(1 + (p.length - 1) / 2)];
   if (code === 2) {
     const first = readLength(p, 1);
-    return !first || first[1] + first[0] > p.length ? [] : [p.subarray(first[1], first[1] + first[0]), p.subarray(first[1] + first[0])];
+    return !first || first[1] + first[0] > p.length
+      ? []
+      : [p.subarray(first[1], first[1] + first[0]), p.subarray(first[1] + first[0])];
   }
   if (p.length < 2) return [];
   const [vbr, padded, count] = [(p[1] & 0x80) !== 0, (p[1] & 0x40) !== 0, p[1] & 0x3f];

@@ -22,7 +22,16 @@ export class Channel {
   constructor(o) {
     this.o = o;
     this.channel = o.channel;
-    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, invite: o.match.invite ?? undefined, fetch: o.fetch, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
+    this.forwarder = new Forwarder({
+      url: o.match.voice,
+      key: o.key,
+      delay: o.delay,
+      channel: o.channel.id,
+      invite: o.match.invite ?? undefined,
+      fetch: o.fetch,
+      onStop: why => this.leave(why),
+      onSaid: said => this.#log(said),
+    });
     this.voice = o.voice ?? { joinVoiceChannel, entersState };
     /** What stv.tf last answered, its numbers aside: logged when it changes. */
     this.answered = "";
@@ -92,7 +101,9 @@ export class Channel {
   /** Tells stv.tf how it goes here and who is in the channel, so they can be put on players. */
   report() {
     if (this.gone) return;
-    const people = [...this.channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }));
+    const people = [...this.channel.members.values()]
+      .filter(m => !m.user.bot)
+      .map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
     tell(this.#to(), { kind: "discord", status, people, channel: this.channel.id });
   }
@@ -111,7 +122,8 @@ export class Channel {
     if (now.id === this.channel.guild.members.me?.id && now.channelId !== this.channel.id)
       return this.leave(now.channelId ? "moved" : "disconnected");
     // Only who is here matters: not a mute, nor another channel.
-    if (old.channelId === now.channelId || (old.channelId !== this.channel.id && now.channelId !== this.channel.id)) return;
+    if (old.channelId === now.channelId || (old.channelId !== this.channel.id && now.channelId !== this.channel.id))
+      return;
     if (!this.hasPeople()) return this.leave("channel empty");
     // Someone came or went: stv.tf hears who is here now.
     this.report();

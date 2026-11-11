@@ -26,7 +26,12 @@ const NAMES = Object.fromEntries(Object.entries(TYPES).map(([name, n]) => [n, na
 /** @type {Record<string, Record<number, [string, string]>>} */
 const FIELDS = {
   Version: { 1: ["version_v1", "uint"], 2: ["release", "string"], 3: ["os", "string"], 4: ["os_version", "string"] },
-  Authenticate: { 1: ["username", "string"], 2: ["password", "string"], 5: ["opus", "bool"], 6: ["client_type", "uint"] },
+  Authenticate: {
+    1: ["username", "string"],
+    2: ["password", "string"],
+    5: ["opus", "bool"],
+    6: ["client_type", "uint"],
+  },
   Ping: { 1: ["timestamp", "uint"] },
   Reject: { 1: ["type", "uint"], 2: ["reason", "string"] },
   ServerSync: { 1: ["session", "uint"], 3: ["welcome_text", "string"] },
@@ -94,7 +99,7 @@ export function decode(type, body) {
   /** @type {Record<string, any>} */
   const out = {};
   const fields = FIELDS[type] ?? {};
-  for (let at = 0; at < body.length; ) {
+  for (let at = 0; at < body.length;) {
     let tag;
     [tag, at] = readVarint(body, at);
     const [name, kind] = fields[tag >> 3] ?? [];

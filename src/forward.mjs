@@ -96,7 +96,15 @@ export class Forwarder {
         headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(POST_MS),
         redirect: "error",
-        body: JSON.stringify({ invite: this.invite, steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
+        body: JSON.stringify({
+          invite: this.invite,
+          steamid,
+          discord,
+          name,
+          channel: this.channel,
+          frames: b.frames,
+          delay: this.delay,
+        }),
       });
       if (r.status === 404) return this.#stop("match ended");
       if (r.status === 401) return this.#stop("key refused");

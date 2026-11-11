@@ -59,7 +59,10 @@ export function startSession(job, status, o) {
   const report = () => {
     const there = client?.people() ?? [];
     const n = there.length;
-    status(`${job.channel} · ${n}`, there.map(p => ({ id: idOf(p), name: p.name })));
+    status(
+      `${job.channel} · ${n}`,
+      there.map(p => ({ id: idOf(p), name: p.name })),
+    );
   };
   const session = {
     get delay() {
@@ -105,7 +108,10 @@ export function startSession(job, status, o) {
         if (gone) return;
         const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
         const who = { steamid: null, discord: idOf(v), name: v.name };
-        for (const opus of [.../** @type {Twenties} */ (packer).push(v.opus), ...(v.last ? /** @type {Twenties} */ (packer).flush() : [])])
+        for (const opus of [
+          .../** @type {Twenties} */ (packer).push(v.opus),
+          ...(v.last ? /** @type {Twenties} */ (packer).flush() : []),
+        ])
           forwarder.frame(who, opus);
       },
       onGone: why => {
@@ -138,7 +144,10 @@ export function startSession(job, status, o) {
       if (gone) return void client.leave("disconnected");
       client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
       report();
-      timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));
+      timers.push(
+        setInterval(() => forwarder.flush(), FLUSH_MS),
+        setInterval(report, STATUS_MS),
+      );
     } catch (e) {
       gone = true;
       // Told to leave, it has nothing more to say: another may be there by now.

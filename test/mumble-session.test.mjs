@@ -4,26 +4,57 @@ import { tlsOptions } from "../src/mumble/client.mjs";
 import { addressOf, startSession } from "../src/mumble/session.mjs";
 import { fake, tick, welcomeIn } from "./fake-mumble.mjs";
 
-const lookup = (/** @type {string[]} */ ips) => async (host, o) => (assert.equal(o.all, true), ips.map(address => ({ address, family: address.includes(":") ? 6 : 4 })));
+const lookup = (/** @type {string[]} */ ips) => async (host, o) => (
+  assert.equal(o.all, true),
+  ips.map(address => ({ address, family: address.includes(":") ? 6 : 4 }))
+);
 
 test("a server is joined at an address checked, every one of its addresses public", async () => {
-  assert.equal(await addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "2606:2800:220:1::1"]) }), "93.184.216.34");
-  await assert.rejects(addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "10.0.0.1"]) }), /private address/);
+  assert.equal(
+    await addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "2606:2800:220:1::1"]) }),
+    "93.184.216.34",
+  );
+  await assert.rejects(
+    addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "10.0.0.1"]) }),
+    /private address/,
+  );
   await assert.rejects(addressOf("mumble.example", { lookup: lookup(["::1", "93.184.216.34"]) }), /private address/);
   await assert.rejects(addressOf("mumble.example", { lookup: lookup([]) }), /no address/);
-  assert.equal(await addressOf("mumble.example", { lookup: lookup(["10.0.0.1"]), anywhere: true }), "10.0.0.1", "when said so, for trying out");
+  assert.equal(
+    await addressOf("mumble.example", { lookup: lookup(["10.0.0.1"]), anywhere: true }),
+    "10.0.0.1",
+    "when said so, for trying out",
+  );
 });
 
 test("the connection goes to that address, its name the server's for TLS", () => {
   assert.deepEqual(tlsOptions({ host: "mumble.example", address: "93.184.216.34", port: 1 }), {
-    host: "93.184.216.34", port: 1, servername: "mumble.example", rejectUnauthorized: false, cert: undefined, key: undefined,
+    host: "93.184.216.34",
+    port: 1,
+    servername: "mumble.example",
+    rejectUnauthorized: false,
+    cert: undefined,
+    key: undefined,
   });
-  assert.equal(tlsOptions({ host: "93.184.216.34", address: "93.184.216.34" }).servername, undefined, "no name for an address");
+  assert.equal(
+    tlsOptions({ host: "93.184.216.34", address: "93.184.216.34" }).servername,
+    undefined,
+    "no name for an address",
+  );
 });
 
 const job = (over = {}) => ({
-  match: "m1", invite: "inv", host: "mumble.example", port: 64738, password: "pw", channel: "Team Comms", delay: 90, asked: 1,
-  page: "https://stv.tf/w/m1/", voice: "https://stv.tf/w/m1/voice", ...over,
+  match: "m1",
+  invite: "inv",
+  host: "mumble.example",
+  port: 64738,
+  password: "pw",
+  channel: "Team Comms",
+  delay: 90,
+  asked: 1,
+  page: "https://stv.tf/w/m1/",
+  voice: "https://stv.tf/w/m1/voice",
+  ...over,
 });
 
 /** A session on a made-up server, posting to a made-up stv.tf. */
@@ -66,7 +97,14 @@ test("leaving resolves once the connection is closed, joined or not yet", async 
   assert.ok(left instanceof Promise);
   await left;
   assert.equal(w.server().closed, true);
-  assert.deepEqual(w.server().sent("TextMessage").map(m => m.message).at(-1), "Leaving: done");
+  assert.deepEqual(
+    w
+      .server()
+      .sent("TextMessage")
+      .map(m => m.message)
+      .at(-1),
+    "Leaving: done",
+  );
 
   const early = session();
   await wait(5);
@@ -81,7 +119,10 @@ test("a name in use is taken with a number", async () => {
     w.server().send("Reject", { type: 5, reason: "Username already in use" });
   }
   await wait(5);
-  assert.deepEqual(w.servers.map(s => s.sent("Authenticate")[0].username), ["stv.tf", "stv.tf 2", "stv.tf 3"]);
+  assert.deepEqual(
+    w.servers.map(s => s.sent("Authenticate")[0].username),
+    ["stv.tf", "stv.tf 2", "stv.tf 3"],
+  );
   welcomeIn(w.server());
   await wait(5);
   assert.equal(w.statuses.at(-1), "Team Comms · 1");

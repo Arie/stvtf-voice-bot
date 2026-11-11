@@ -42,7 +42,13 @@ export function parseVoice(packet) {
   const [session, sequence, size] = numbers;
   const length = size & (LAST - 1);
   if (at + length > packet.length) return null;
-  return { target: packet[0] & 31, session, sequence, opus: packet.subarray(at, at + length), last: (size & LAST) !== 0 };
+  return {
+    target: packet[0] & 31,
+    session,
+    sequence,
+    opus: packet.subarray(at, at + length),
+    last: (size & LAST) !== 0,
+  };
 }
 
 /**
@@ -53,7 +59,8 @@ export function parseVoice(packet) {
 export function opusDuration(opus) {
   if (!opus.length) return 0;
   const config = opus[0] >> 3;
-  const frame = config < 12 ? [10, 20, 40, 60][config & 3] : config < 16 ? [10, 20][config & 1] : [2.5, 5, 10, 20][config & 3];
+  const frame =
+    config < 12 ? [10, 20, 40, 60][config & 3] : config < 16 ? [10, 20][config & 1] : [2.5, 5, 10, 20][config & 3];
   const code = opus[0] & 3;
   const frames = code === 0 ? 1 : code < 3 ? 2 : (opus[1] ?? 0) & 0x3f;
   return frame * frames;

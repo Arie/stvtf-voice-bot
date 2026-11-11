@@ -38,11 +38,18 @@ const command = new SlashCommandBuilder()
     s
       .setName("join")
       .setDescription("Record your voice channel for a match")
-      .addStringOption(o => o.setName("link").setDescription("Link from stv.tf (Comms → Copy command)").setRequired(true))
+      .addStringOption(o =>
+        o.setName("link").setDescription("Link from stv.tf (Comms → Copy command)").setRequired(true),
+      )
       .addNumberOption(delayOption),
   )
   .addSubcommand(s => s.setName("leave").setDescription("Leave the voice channel"))
-  .addSubcommand(s => s.setName("delay").setDescription("Change tv_delay").addNumberOption(o => delayOption(o).setRequired(true)))
+  .addSubcommand(s =>
+    s
+      .setName("delay")
+      .setDescription("Change tv_delay")
+      .addNumberOption(o => delayOption(o).setRequired(true)),
+  )
   .addSubcommand(s => s.setName("link").setDescription("Link your Steam account"));
 
 /** @type {Map<string, Channel>} The channel the bot is in, by server. */
@@ -58,7 +65,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 client.on("error", e => console.error("stvtf-voice-bot:", e));
 
 client.once("clientReady", async () => {
-  await client.application?.commands.set([command.toJSON()]).catch(e => console.error("stvtf-voice-bot: commands not set:", e));
+  await client.application?.commands
+    .set([command.toJSON()])
+    .catch(e => console.error("stvtf-voice-bot: commands not set:", e));
   console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${HOSTS.join(", ")}`);
 });
 
@@ -72,7 +81,16 @@ const whoFor = url => {
 
 /** @param {import("discord.js").ChatInputCommandInteraction} i */
 const join = i =>
-  joinChannel(i, { hosts: HOSTS, key: KEY, nick: NICK, defaultDelay: DEFAULT_DELAY, channels, joining, whoFor, makeChannel: o => new Channel(o) });
+  joinChannel(i, {
+    hosts: HOSTS,
+    key: KEY,
+    nick: NICK,
+    defaultDelay: DEFAULT_DELAY,
+    channels,
+    joining,
+    whoFor,
+    makeChannel: o => new Channel(o),
+  });
 
 const NOT_IN = "Join my voice channel first.";
 
@@ -103,7 +121,8 @@ client.on("interactionCreate", async i => {
         here.forwarder.delay = i.options.getNumber("delay", true);
         const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
         // Told where it is recorded, wherever the command was given.
-        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id) here.channel.send(quiet(said)).catch(() => {});
+        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
+          here.channel.send(quiet(said)).catch(() => {});
         return await i.reply(quiet(said));
       }
       case "link":
@@ -118,14 +137,20 @@ client.on("interactionCreate", async i => {
 client.on("voiceStateUpdate", (old, now) => channels.get(old.guild.id)?.update(old, now));
 
 // Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's page).
-const mumble = HOSTS.map(host => new Jobs({ origin: homeOf([host]), key: KEY, start: (job, status) => startSession(job, status, { key: KEY }) }));
+const mumble = HOSTS.map(
+  host =>
+    new Jobs({ origin: homeOf([host]), key: KEY, start: (job, status) => startSession(job, status, { key: KEY }) }),
+);
 for (const jobs of mumble) jobs.run();
 
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {
     for (const c of channels.values()) c.leave("restarting");
     // Mumble's goodbyes get a moment to go out.
-    await Promise.race([Promise.all(mumble.map(jobs => jobs.stop("restarting"))), new Promise(r => setTimeout(r, 2000))]);
+    await Promise.race([
+      Promise.all(mumble.map(jobs => jobs.stop("restarting"))),
+      new Promise(r => setTimeout(r, 2000)),
+    ]);
     await client.destroy();
     process.exit(0);
   });
