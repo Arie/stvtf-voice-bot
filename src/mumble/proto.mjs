@@ -1,0 +1,161 @@
+// Mumble's control messages, as much of them as the bot needs: each a protobuf message, sent as
+// a type (2 bytes), a length (4 bytes) and the message. Field numbers are Mumble.proto's.
+
+/** The message types by name, as the connection numbers them. */
+export const TYPES = {
+  Version: 0,
+  UDPTunnel: 1,
+  Authenticate: 2,
+  Ping: 3,
+  Reject: 4,
+  ServerSync: 5,
+  ChannelRemove: 6,
+  ChannelState: 7,
+  UserRemove: 8,
+  UserState: 9,
+  TextMessage: 11,
+  PermissionDenied: 12,
+  CryptSetup: 15,
+  CodecVersion: 21,
+  ServerConfig: 24,
+};
+const NAMES = Object.fromEntries(Object.entries(TYPES).map(([name, n]) => [n, name]));
+
+// Per message: field number → [name, kind], kind one of uint, bool, string; a `[]` after it for
+// a repeated field.
+/** @type {Record<string, Record<number, [string, string]>>} */
+const FIELDS = {
+  Version: { 1: ["version_v1", "uint"], 2: ["release", "string"], 3: ["os", "string"], 4: ["os_version", "string"] },
+  Authenticate: { 1: ["username", "string"], 2: ["password", "string"], 5: ["opus", "bool"], 6: ["client_type", "uint"] },
+  Ping: { 1: ["timestamp", "uint"] },
+  Reject: { 1: ["type", "uint"], 2: ["reason", "string"] },
+  ServerSync: { 1: ["session", "uint"], 3: ["welcome_text", "string"] },
+  ChannelRemove: { 1: ["channel_id", "uint"] },
+  ChannelState: { 1: ["channel_id", "uint"], 2: ["parent", "uint"], 3: ["name", "string"] },
+  UserRemove: { 1: ["session", "uint"], 3: ["reason", "string"] },
+  UserState: {
+    1: ["session", "uint"],
+    3: ["name", "string"],
+    4: ["user_id", "uint"],
+    5: ["channel_id", "uint"],
+    9: ["self_mute", "bool"],
+    10: ["self_deaf", "bool"],
+    14: ["comment", "string"],
+    15: ["hash", "string"],
+    19: ["recording", "bool"],
+  },
+  TextMessage: { 1: ["actor", "uint"], 3: ["channel_id", "uint[]"], 5: ["message", "string"] },
+  PermissionDenied: { 4: ["reason", "string"], 5: ["type", "uint"] },
+};
+
+/** @param {number} n A whole number, 0 and up. */
+function writeVarint(n) {
+  const out = [];
+  let v = BigInt(n);
+  while (v > 127n) {
+    out.push(Number(v & 127n) | 128);
+    v >>= 7n;
+  }
+  out.push(Number(v));
+  return Buffer.from(out);
+}
+
+/** @param {Buffer} b @param {number} at @returns {[number, number]} The number, and where it ends. */
+function readVarint(b, at) {
+  let v = 0n;
+  for (let shift = 0n; at < b.length; shift += 7n) {
+    const byte = b[at++];
+    v |= BigInt(byte & 127) << shift;
+    if (byte < 128) return [Number(v), at];
+  }
+  throw new Error("a number cut short");
+}
+
+/** @param {string} type @param {Record<string, unknown>} message */
+export function encode(type, message) {
+  const parts = [];
+  for (const [number, [name, kind]] of Object.entries(FIELDS[type])) {
+    const value = message[name];
+    if (value == null) continue;
+    for (const v of kind.endsWith("[]") ? /** @type {unknown[]} */ (value) : [value]) {
+      if (kind.startsWith("string")) {
+        const text = Buffer.from(String(v));
+        parts.push(writeVarint((Number(number) << 3) | 2), writeVarint(text.length), text);
+      } else parts.push(writeVarint(Number(number) << 3), writeVarint(Number(v)));
+    }
+  }
+  return Buffer.concat(parts);
+}
+
+/** @param {string} type @param {Buffer} body @returns {Record<string, any>} The fields we know of. */
+export function decode(type, body) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  const fields = FIELDS[type] ?? {};
+  for (let at = 0; at < body.length; ) {
+    let tag;
+    [tag, at] = readVarint(body, at);
+    const [name, kind] = fields[tag >> 3] ?? [];
+    let value;
+    switch (tag & 7) {
+      case 0:
+        [value, at] = readVarint(body, at);
+        break;
+      case 1:
+        at += 8;
+        break;
+      case 2: {
+        let length;
+        [length, at] = readVarint(body, at);
+        if (at + length > body.length) throw new Error("a field cut short");
+        value = body.subarray(at, at + length);
+        at += length;
+        break;
+      }
+      case 5:
+        at += 4;
+        break;
+      default:
+        throw new Error(`a field of a kind unknown (${tag & 7})`);
+    }
+    if (!name || value === undefined) continue;
+    if (kind.startsWith("string")) value = Buffer.isBuffer(value) ? value.toString() : undefined;
+    else if (Buffer.isBuffer(value)) continue;
+    else if (kind === "bool") value = value !== 0;
+    if (value === undefined) continue;
+    if (kind.endsWith("[]")) (out[name] ??= []).push(value);
+    else out[name] = value;
+  }
+  return out;
+}
+
+/** A message as the connection carries it. @param {keyof typeof TYPES} type @param {Buffer} body */
+export function frame(type, body) {
+  const head = Buffer.alloc(6);
+  head.writeUInt16BE(TYPES[type], 0);
+  head.writeUInt32BE(body.length, 2);
+  return Buffer.concat([head, body]);
+}
+
+// The most a message is: the server's limit is far lower; more is a broken stream.
+const MAX_MESSAGE = 8 << 20;
+
+/** The connection's bytes cut into messages, as they come. */
+export class Frames {
+  buffered = Buffer.alloc(0);
+
+  /** @param {Buffer} chunk @returns {{ type: string; body: Buffer }[]} The messages now whole. */
+  push(chunk) {
+    this.buffered = Buffer.concat([this.buffered, chunk]);
+    const out = [];
+    while (this.buffered.length >= 6) {
+      const length = this.buffered.readUInt32BE(2);
+      if (length > MAX_MESSAGE) throw new Error(`a message of ${length} bytes`);
+      if (this.buffered.length < 6 + length) break;
+      const type = NAMES[this.buffered.readUInt16BE(0)] ?? `#${this.buffered.readUInt16BE(0)}`;
+      out.push({ type, body: this.buffered.subarray(6, 6 + length) });
+      this.buffered = this.buffered.subarray(6 + length);
+    }
+    return out;
+  }
+}
