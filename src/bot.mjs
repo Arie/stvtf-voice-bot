@@ -159,6 +159,8 @@ client.on("interactionCreate", async i => {
 client.on("voiceStateUpdate", old => {
   const here = channels.get(old.guild.id);
   if (here && !here.hasPeople()) here.leave("everyone left.");
+  // Someone came or went: stv.tf hears who is here now.
+  else here?.report();
 });
 
 // Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's page).

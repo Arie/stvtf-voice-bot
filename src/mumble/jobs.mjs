@@ -3,6 +3,7 @@
 // answers the moment something changes, so a channel is joined as it is asked for; and tells it
 // how each goes (`POST /voice/mumble`), for the page to show.
 import net from "node:net";
+import { tell } from "../status.mjs";
 
 // How long stv.tf may keep a question open, and how long to wait after it did not answer.
 const ASK_MS = 40_000,
@@ -31,7 +32,7 @@ export class Jobs {
   /**
    * @param {{
    *   origin: string; key: string; fetch?: typeof fetch;
-   *   start: (job: Job, status: (text: string) => void) => Session | null;
+   *   start: (job: Job, status: (text: string, people?: { id: string; name: string }[]) => void) => Session | null;
    * }} o `start` joins a channel (or says why not, and gives none).
    */
   constructor(o) {
@@ -78,26 +79,13 @@ export class Jobs {
         if (had.session) had.session.delay = job.delay;
         continue;
       }
-      const status = (/** @type {string} */ text) => this.#tell(job.match, text);
+      const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
+        this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people }));
       // One that would not be joined is not tried again until it is asked for anew.
       this.sessions.set(job.match, { same: same(job), session: this.o.start(job, status) });
     }
     await Promise.all(this.telling.splice(0));
     return true;
-  }
-
-  /** @param {string} match @param {string} status */
-  #tell(match, status) {
-    const told = this.o
-      .fetch(`${this.o.origin}/voice/mumble`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${this.o.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ match, status }),
-        signal: AbortSignal.timeout(RETRY_MS),
-        redirect: "error",
-      })
-      .catch(() => {});
-    this.telling.push(told);
   }
 
   /** Keeps asking until stopped. */

@@ -10,7 +10,7 @@ function world() {
   w.fetch = async (url, init = {}) => {
     if (w.down) throw new Error("down");
     if (init.method === "POST") {
-      w.told.push(JSON.parse(init.body));
+      w.told.push({ url, ...JSON.parse(init.body) });
       return { ok: true, status: 204 };
     }
     return { ok: true, status: 200, json: async () => ({ jobs: w.wanted, version: w.version }) };
@@ -18,7 +18,7 @@ function world() {
   w.start = (j, status) => {
     const s = { job: j, status, delay: j.delay, leave: why => w.left.push([j.match, j.channel, why]) };
     w.started.push(s);
-    status(`In ${j.channel} with 2 people`);
+    status(`In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
     return s;
   };
   return w;
@@ -33,7 +33,15 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
     [w.started[0].job.voice, w.started[0].job.host, w.started[0].job.channel, w.started[0].job.invite],
     ["https://stv.tf/w/m1/voice", "mumble.example", "Team A", "inv"],
   );
-  assert.deepEqual(w.told, [{ match: "m1", status: "In Team A with 2 people" }]);
+  assert.deepEqual(w.told, [
+    {
+      url: "https://stv.tf/w/m1/voice-status",
+      invite: "inv",
+      kind: "mumble",
+      status: "In Team A with 2 people",
+      people: [{ id: "mumble:mumble.example:user:1", name: "arie" }],
+    },
+  ]);
   // Asked again, with what it has: nothing new, nothing done.
   await jobs.once();
   assert.equal(w.started.length, 1);

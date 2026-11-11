@@ -14,7 +14,8 @@ const FLUSH_MS = 100,
 const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
 
 /**
- * @param {import("./jobs.mjs").Job} job @param {(text: string) => void} status @param {{ key: string; name?: string }} o
+ * @param {import("./jobs.mjs").Job} job @param {(text: string, people?: { id: string; name: string }[]) => void} status
+ * @param {{ key: string; name?: string }} o
  * @returns {import("./jobs.mjs").Session}
  */
 export function startSession(job, status, o) {
@@ -33,9 +34,13 @@ export function startSession(job, status, o) {
   /** @type {ReturnType<typeof setInterval>[]} */
   const timers = [];
   let gone = false;
-  const people = () => {
-    const n = client?.people().length ?? 0;
-    return `In ${job.channel} on ${job.host} with ${n} ${n === 1 ? "person" : "people"}`;
+  /** Who someone is on this server, as stv.tf knows them. @param {{ id: string; session: number }} p */
+  const idOf = p => `mumble:${job.host}:${(p.id || `session:${p.session}`).replace(/[^A-Za-z0-9:._-]/g, "")}`;
+  // How it goes, and who is in the channel: told to stv.tf.
+  const report = () => {
+    const there = client?.people() ?? [];
+    const n = there.length;
+    status(`In ${job.channel} on ${job.host} with ${n} ${n === 1 ? "person" : "people"}`, there.map(p => ({ id: idOf(p), name: p.name })));
   };
   const session = {
     get delay() {
@@ -71,7 +76,7 @@ export function startSession(job, status, o) {
         channel: job.channel,
         onVoice: v => {
           const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
-          const who = { steamid: null, discord: `mumble:${job.host}:${(v.id || `session:${v.session}`).replace(/[^A-Za-z0-9:._-]/g, "")}`, name: v.name };
+          const who = { steamid: null, discord: idOf(v), name: v.name };
           for (const opus of [.../** @type {Twenties} */ (packer).push(v.opus), ...(v.last ? /** @type {Twenties} */ (packer).flush() : [])])
             forwarder.frame(who, opus);
         },
@@ -79,18 +84,18 @@ export function startSession(job, status, o) {
           if (gone) return;
           gone = true;
           timers.forEach(clearInterval);
-          status(`Left: ${why}`);
+          status(`Left: ${why}`, []);
         },
       });
       await client.join();
       if (gone) return client.leave("asked to leave meanwhile");
       const how = job.delay ? `${job.delay} s behind, with the match's SourceTV` : "live";
       client.say(`Recording this channel for ${job.page}: what is said here is heard there by everyone watching, ${how}.`);
-      status(people());
-      timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(() => status(people()), STATUS_MS));
+      report();
+      timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));
     } catch (e) {
       gone = true;
-      status(`Could not join: ${/** @type {Error} */ (e).message}`);
+      status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
     }
   })();
   return session;

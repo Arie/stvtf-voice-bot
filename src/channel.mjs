@@ -3,10 +3,13 @@
 // empty of people, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "./forward.mjs";
+import { tell } from "./status.mjs";
 
-// How often what is batched is flushed, and how long joining may take.
+// How often what is batched is flushed, how long joining may take, and how often stv.tf is told
+// how it goes and who is here.
 const FLUSH_MS = 100,
-  JOIN_MS = 30_000;
+  JOIN_MS = 30_000,
+  STATUS_MS = 10_000;
 
 export class Channel {
   /**
@@ -41,6 +44,8 @@ export class Channel {
     this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("I was disconnected from the channel."));
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
+    this.report();
+    this.reporting = setInterval(() => this.report(), STATUS_MS);
   }
 
   /** @param {string} id A Discord user id, the first time they talk. */
@@ -80,6 +85,14 @@ export class Channel {
     return out;
   }
 
+  /** Tells stv.tf how it goes here and who is in the channel, so they can be put on players. */
+  report() {
+    if (this.gone) return;
+    const people = [...this.channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }));
+    const status = `In ${this.channel.name} on ${this.channel.guild.name} with ${people.length} ${people.length === 1 ? "person" : "people"}`;
+    tell({ page: this.o.match.page, key: this.o.key, invite: this.o.match.invite }, { kind: "discord", status, people });
+  }
+
   /** Whether anyone but bots is in the channel. */
   hasPeople() {
     return [...this.channel.members.values()].some(m => !m.user.bot);
@@ -90,6 +103,8 @@ export class Channel {
     if (this.gone) return;
     this.gone = true;
     clearInterval(this.timer);
+    clearInterval(this.reporting);
+    tell({ page: this.o.match.page, key: this.o.key, invite: this.o.match.invite }, { kind: "discord", left: true });
     this.forwarder.stopped = true;
     try {
       this.connection?.destroy();
