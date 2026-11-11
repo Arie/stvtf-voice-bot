@@ -14,6 +14,10 @@ const BOT = 1;
 // How often it pings (a server drops a client silent for 30 s), and how long signing in may take.
 const PING_MS = 15_000,
   JOIN_MS = 15_000;
+// What is kept of a server's people and channels: more than any real one has is a server to leave.
+const MAX_NAME = 128,
+  MAX_USERS = 5000,
+  MAX_CHANNELS = 5000;
 
 /** @typedef {{ session: number; name: string; channel: number; id: string }} Person */
 
@@ -112,18 +116,21 @@ export class MumbleClient {
       case "Reject":
         return fail(m.reason ?? "refused");
       case "ChannelState":
-        if (m.name != null) this.channels.set(m.channel_id ?? 0, m.name);
+        if (m.name == null) return;
+        if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS) return fail("too many channels");
+        this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
         return;
       case "ChannelRemove":
         this.channels.delete(m.channel_id);
         return;
       case "UserState": {
+        if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return fail("too many users");
         const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
-        if (m.name != null) u.name = m.name;
+        if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
         if (m.channel_id != null) u.channel = m.channel_id;
         // Who they are from one visit to the next: their certificate, the same on any server;
         // else as registered on this one.
-        if (m.hash) u.id = `cert:${m.hash}`;
+        if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
         else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
         this.users.set(m.session, u);
         return;

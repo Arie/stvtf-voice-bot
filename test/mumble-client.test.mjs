@@ -105,3 +105,33 @@ test("someone is their certificate wherever they talk, else who they are on that
   assert.equal(voiceId("mumble.example", { id: "user:7", session: 4 }), "mumble:mumble.example:user:7");
   assert.equal(voiceId("mumble.example", { id: "", session: 4 }), "mumble:mumble.example:session:4");
 });
+
+test("names are kept short, and a server of more people or channels than any has is left", async () => {
+  const server = fake();
+  let gone = "";
+  const client = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: server.connect, onGone: why => (gone = why) });
+  const joined = client.join();
+  await tick();
+  welcome(server);
+  await joined;
+  server.send("UserState", { session: 10, name: "x".repeat(10_000), channel_id: 5 });
+  server.send("ChannelState", { channel_id: 6, name: "y".repeat(10_000) });
+  await tick();
+  assert.equal(client.users.get(10)?.name.length, 128);
+  assert.equal(client.channels.get(6)?.length, 128);
+  for (let s = 100; s < 20_100 && !gone; s += 1000) {
+    for (let i = s; i < s + 1000; i++) server.send("UserState", { session: i, name: "u" });
+    await tick();
+  }
+  assert.equal(gone, "too many users");
+  assert.ok(client.users.size <= 5000);
+
+  const other = fake();
+  let left = "";
+  const c2 = new MumbleClient({ host: "h", username: "stv.tf", channel: "Team Comms", connect: other.connect, onGone: why => (left = why) });
+  const j2 = c2.join();
+  await tick();
+  for (let i = 0; i < 6000; i++) other.send("ChannelState", { channel_id: i, name: "c" });
+  await assert.rejects(j2, /too many channels/);
+  assert.equal(left, "too many channels");
+});
