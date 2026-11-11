@@ -60,3 +60,20 @@ test("dragged to another channel, it leaves rather than record there", async () 
   w.c.update({ id: "bot", channelId: "42" }, { id: "bot", channelId: "43" });
   assert.deepEqual(w.gone, ["moved"]);
 });
+
+test("stv.tf is told who is here when that changes, not when anyone on the server mutes", async () => {
+  const w = world();
+  await w.c.join();
+  await new Promise(r => setImmediate(r));
+  const before = w.told.length;
+  w.c.update({ id: "1", channelId: "42" }, { id: "1", channelId: "42" });
+  w.c.update({ id: "7", channelId: "50" }, { id: "7", channelId: "51" });
+  w.c.update({ id: "7", channelId: null }, { id: "7", channelId: "50" });
+  await new Promise(r => setImmediate(r));
+  assert.equal(w.told.length, before);
+  w.members.set("7", w.member("7", "coach"));
+  w.c.update({ id: "7", channelId: "50" }, { id: "7", channelId: "42" });
+  await new Promise(r => setImmediate(r));
+  assert.equal(w.told.at(-1).status, "General · 2");
+  w.c.leave("done");
+});

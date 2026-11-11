@@ -31,7 +31,7 @@ test("it says it is recording before it knows who is not linked, then says that"
   const w = world({ unlinked: () => new Promise(r => (known = r)) });
   const joined = join(w.i, w.o);
   await new Promise(r => setImmediate(r));
-  assert.match(w.said.find(s => s[0] === "edit")?.[1] ?? "", /Recording/);
+  assert.match(w.said.find(s => s[0] === "edit")?.[1].content ?? "", /Recording/);
   known(["arie"]);
   await joined;
   assert.match(JSON.stringify(w.said.at(-1)), /Not linked: arie/);
@@ -47,4 +47,12 @@ test("however a join ends, the server can be joined again", async () => {
   w.o.makeChannel = () => ({ join: async () => Promise.reject(new Error("no")), leave: () => {}, unlinked: async () => [] });
   await join(w.i, w.o);
   assert.equal(w.o.joining.size, 0);
+});
+
+test("what it says in a channel mentions nobody, whatever names are in it", async () => {
+  const w = world({ unlinked: async () => ["@everyone"] });
+  await join(w.i, w.o);
+  w.made().o.onGone("/stv leave by @everyone");
+  await new Promise(r => setImmediate(r));
+  for (const kind of ["follow", "channel"]) assert.deepEqual(w.said.find(s => s[0] === kind)?.[1].allowedMentions, { parse: [] }, kind);
 });

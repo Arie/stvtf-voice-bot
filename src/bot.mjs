@@ -6,7 +6,7 @@
 // stv.tf hosts voice may go to, comma separated; default the four regions).
 import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "discord.js";
 import { Channel } from "./channel.mjs";
-import { join as joinChannel, reply } from "./join.mjs";
+import { join as joinChannel, reply, said as quiet } from "./join.mjs";
 import { homeOf } from "./match.mjs";
 import { Who } from "./who.mjs";
 import { mayControl } from "./control.mjs";
@@ -103,8 +103,8 @@ client.on("interactionCreate", async i => {
         here.forwarder.delay = i.options.getNumber("delay", true);
         const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
         // Told where it is recorded, wherever the command was given.
-        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id) here.channel.send(said).catch(() => {});
-        return await i.reply(said);
+        if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id) here.channel.send(quiet(said)).catch(() => {});
+        return await i.reply(quiet(said));
       }
       case "link":
         return await reply(i, `Link Steam: ${homeOf(HOSTS)}/voice/link`);

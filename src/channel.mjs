@@ -110,6 +110,8 @@ export class Channel {
     // The bot dragged elsewhere would record there, unsaid.
     if (now.id === this.channel.guild.members.me?.id && now.channelId !== this.channel.id)
       return this.leave(now.channelId ? "moved" : "disconnected");
+    // Only who is here matters: not a mute, nor another channel.
+    if (old.channelId === now.channelId || (old.channelId !== this.channel.id && now.channelId !== this.channel.id)) return;
     if (!this.hasPeople()) return this.leave("channel empty");
     // Someone came or went: stv.tf hears who is here now.
     this.report();
