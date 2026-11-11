@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Deploy the checked-out commit. The image must already be pushed (run bin/build first).
+# The bot leaves the voice channels it is in; `/stv join` brings it back.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [[ -z "${VERSION:-}" ]] && [[ -n "$(git status --porcelain)" ]]; then
+  echo "Uncommitted changes: set VERSION to the tag bin/build pushed." >&2
+  exit 1
+fi
+# Without a proxy Kamal starts the new container before it stops the old: two bots signed in
+# would both answer a command. So the old one goes first (none yet, the first time).
+kamal app stop || true
+exec kamal deploy --skip-push "$@"

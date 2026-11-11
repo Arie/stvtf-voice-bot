@@ -1,0 +1,41 @@
+# The voice bot as a Kamal app: one container, on the stv.tf host in Europe. It serves nothing
+# (no proxy, no ports): it connects out, to Discord and to the stv.tf of whichever region a
+# match is on.
+#   bin/build && bin/deploy     (or: kamal deploy)
+#
+# A deploy drops the bot from the voice channels it is in (it says so there): `/stv join` again.
+service: stvtf-voice-bot
+image: arie/stvtf-voice-bot
+
+registry:
+  server: ghcr.io
+  username: Arie
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+
+servers:
+  bot:
+    hosts: [new.fakkelbrigade.eu]
+    proxy: false
+    options:
+      memory: 256m
+
+primary_role: bot
+
+env:
+  clear:
+    # The first is where people link Steam, and where who they are is asked.
+    STVTF_HOSTS: stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf
+  secret:
+    - DISCORD_TOKEN
+    - STVTF_VOICE_KEY
+
+ssh:
+  user: kamal
+  keys: ["~/.ssh/id_kamal"]
+
+aliases:
+  logs: app logs -f

@@ -31,3 +31,23 @@ Messages and Change Nickname permissions, and the `applications.commands` scope.
 runs the tests of the parts that do not need Discord. The first host is where people link Steam
 and where the bot asks who they are, for matches on any of them: only it needs the Discord
 application; all share the voice key.
+
+## Deploying
+
+`config/deploy.yml` is the Kamal config: one container on the stv.tf host in Europe, no proxy
+and no ports (it only connects out). Secrets are read from `~/.config/stvtf/`:
+
+| file | |
+|---|---|
+| `ghcr.token` | the registry token stv.tf deploys with |
+| `voice-bot.token` | the bot's token, from its Discord application |
+| `voice.key` | `openssl rand -hex 32`; the same key every stv.tf region is started with |
+
+| command | |
+|---|---|
+| `bin/build` | builds and pushes the image, tagged with the commit |
+| `bin/deploy` | stops the running bot, then starts the new one |
+| `kamal logs` | follows its log |
+
+A deploy takes the bot out of the voice channels it is in (it says so there); `/stv join` brings
+it back. So not during a match.
