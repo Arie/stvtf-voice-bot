@@ -14,6 +14,18 @@ const FLUSH_MS = 100,
 const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
 
 /**
+ * Where to reach `host`: one of its addresses, once every one is known to be out on the internet
+ * (a name can give one public and one private, and a second lookup another).
+ * @param {string} host @param {{ lookup?: typeof dns.lookup; anywhere?: boolean }} [o]
+ */
+export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE } = {}) {
+  const all = await lookup(host, { all: true });
+  if (!all.length) throw new Error("no address");
+  if (!anywhere && !all.every(a => isPublic(a.address))) throw new Error("private address");
+  return all[0].address;
+}
+
+/**
  * @param {import("./jobs.mjs").Job} job @param {(text: string, people?: { id: string; name: string }[]) => void} status
  * @param {{ key: string; name?: string }} o
  * @returns {import("./jobs.mjs").Session}
@@ -66,10 +78,10 @@ export function startSession(job, status, o) {
   };
   (async () => {
     try {
-      const { address } = await dns.lookup(job.host);
-      if (!isPublic(address) && !ANYWHERE) throw new Error("private address");
+      const address = await addressOf(job.host);
       client = new MumbleClient({
         host: job.host,
+        address,
         port: job.port,
         username: o.name ?? "stv.tf",
         password: job.password || undefined,

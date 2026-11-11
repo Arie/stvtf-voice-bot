@@ -12,17 +12,36 @@ const ASK_MS = 40_000,
 /** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; voice: string; page: string }} Job */
 /** @typedef {{ delay: number; leave: (why: string) => void }} Session */
 
+/** An IPv6 address (as net.isIPv6 takes it) as its 16 bytes. @param {string} ip */
+function bytes6(ip) {
+  // One that ends in IPv4's form: those four bytes as two groups.
+  const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
+  const text = v4 ? ip.slice(0, v4.index) + ((+v4[1] << 8) | +v4[2]).toString(16) + ":" + ((+v4[3] << 8) | +v4[4]).toString(16) : ip;
+  const [l, r] = text.split("::");
+  const left = l ? l.split(":") : [],
+    right = r ? r.split(":") : [];
+  const groups = r === undefined ? left : [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
+  return groups.flatMap(g => [parseInt(g, 16) >> 8, parseInt(g, 16) & 255]);
+}
+
 /** Whether `ip` is out on the internet: not this machine, its network, or a link's own. @param {string} ip */
 export function isPublic(ip) {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
-  if (mapped) return isPublic(mapped[1]);
   if (net.isIPv4(ip)) {
-    const [a, b] = ip.split(".").map(Number);
-    return !(a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b < 128) || a >= 224);
+    const [a, b, c] = ip.split(".").map(Number);
+    return !(
+      a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b < 128) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && c === 0) || a >= 224
+    );
   }
   if (!net.isIPv6(ip)) return false;
-  const low = ip.toLowerCase();
-  return !(low === "::" || low === "::1" || /^f[cd]/.test(low) || /^fe[89ab]/.test(low) || low.startsWith("ff"));
+  const x = bytes6(ip);
+  const word = (/** @type {number} */ i) => x[i] * 256 + x[i + 1];
+  // IPv4 in IPv6 (mapped, or the old compatible form): as that address.
+  if (x.slice(0, 10).every(b => b === 0)) return word(10) === 0xffff && isPublic(x.slice(12).join("."));
+  // NAT64 and 6to4 lead to IPv4 addresses of any kind.
+  if (word(0) === 0x64 && word(2) === 0xff9b) return false;
+  if (word(0) === 0x2002) return false;
+  return !((x[0] & 0xfe) === 0xfc || (x[0] === 0xfe && (x[1] & 0xc0) === 0x80) || x[0] === 0xff);
 }
 
 /** What makes a job another one: all but its delay. @param {Job} j */

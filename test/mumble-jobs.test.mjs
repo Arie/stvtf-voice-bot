@@ -103,3 +103,9 @@ test("the same channel asked for anew is left and joined again", async () => {
   assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
   assert.equal(w.started.length, 2);
 });
+
+test("nor any range that leads back in: benchmarking, IETF, NAT64, 6to4, IPv4 in IPv6 however written", () => {
+  for (const ip of ["198.18.0.1", "198.19.255.1", "192.0.0.8", "64:ff9b::a00:1", "64:ff9b::808:808", "2002:a00:1::1", "::ffff:a00:1", "::ffff:127.0.0.1", "0:0:0:0:0:ffff:7f00:1", "::127.0.0.1", "::"])
+    assert.equal(isPublic(ip), false, ip);
+  for (const ip of ["198.20.0.1", "192.0.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888"]) assert.equal(isPublic(ip), true, ip);
+});

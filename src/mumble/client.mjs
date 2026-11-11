@@ -2,6 +2,7 @@
 // own flag: its clients show it, and say so when it starts), and handing on each speaker's Opus
 // as the server passes it. Voice comes over this one connection: the bot never sets up the
 // separate voice channel, so the server tunnels it here.
+import net from "node:net";
 import tls from "node:tls";
 import { decode, encode, frame, Frames } from "./proto.mjs";
 import { parseVoice } from "./voice.mjs";
@@ -25,15 +26,29 @@ export function voiceId(host, p) {
   return p.id.startsWith("cert:") ? `mumble:${clean(p.id)}` : `mumble:${host}:${clean(p.id || `session:${p.session}`)}`;
 }
 
+/**
+ * How to reach the server: at the address checked (not its name, which could be looked up anew),
+ * with its name for TLS. Not verified: Mumble servers are mostly self-signed.
+ * @param {{ host: string; address?: string; port?: number; cert?: string; key?: string }} o
+ */
+export const tlsOptions = o => ({
+  host: o.address ?? o.host,
+  port: o.port ?? 64738,
+  servername: net.isIP(o.host) ? undefined : o.host,
+  rejectUnauthorized: false,
+  cert: o.cert,
+  key: o.key,
+});
+
 export class MumbleClient {
   /**
    * @param {{
-   *   host: string; port?: number; username: string; password?: string; channel: string;
+   *   host: string; address?: string; port?: number; username: string; password?: string; channel: string;
    *   onVoice?: (v: { session: number; name: string; id: string; opus: Buffer; last: boolean }) => void;
    *   onGone?: (why: string) => void; onText?: (from: Person | undefined, text: string) => void;
    *   connect?: () => import("node:stream").Duplex; every?: (f: () => void, ms: number) => () => void;
    *   cert?: string; key?: string;
-   * }} o `channel` is a channel's name, whatever its case.
+   * }} o `channel` is a channel's name, whatever its case; `address`, where `host` is.
    */
   constructor(o) {
     this.o = o;
@@ -49,7 +64,7 @@ export class MumbleClient {
   /** Signs in and goes to the channel: resolves once there, rejects with why not. */
   join() {
     const o = this.o;
-    const connect = o.connect ?? (() => tls.connect({ host: o.host, port: o.port ?? 64738, rejectUnauthorized: false, cert: o.cert, key: o.key }));
+    const connect = o.connect ?? (() => tls.connect(tlsOptions(o)));
     // Neither timer keeps the process going by itself.
     const every = o.every ?? ((f, ms) => (t => () => clearInterval(t))(setInterval(f, ms).unref()));
     return new Promise((resolve, reject) => {
