@@ -21,6 +21,8 @@ export function matchOf(link, hosts) {
     return null;
   }
   const local = LOCAL.test(url.host);
+  // Given without a scheme: a local stv.tf has no https.
+  if (local && !/^https?:\/\//.test(link)) url.protocol = "http:";
   if (!hosts.includes(url.host) || (url.protocol !== "https:" && !local)) return null;
   const m = url.pathname.match(/^\/([wr])\/([0-9a-z]{1,64})(\/|$)/);
   if (!m) return null;

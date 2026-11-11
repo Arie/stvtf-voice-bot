@@ -18,7 +18,9 @@ export class Channel {
   constructor(o) {
     this.o = o;
     this.channel = o.channel;
-    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, onStop: why => this.leave(why) });
+    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
+    /** What stv.tf last answered, its numbers aside: logged when it changes. */
+    this.answered = "";
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
     /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
@@ -60,6 +62,14 @@ export class Channel {
       this.forwarder.frame({ steamid, discord: id, name: member?.displayName ?? "someone" }, opus);
     });
     this.frames.set(id, then);
+  }
+
+  /** @param {string} said What stv.tf answered a post, or why it failed. */
+  #log(said) {
+    const kind = said.replace(/\d+$/, "");
+    if (kind === this.answered) return;
+    this.answered = kind;
+    console.log(`stvtf-voice-bot: ${this.channel.guild.name} → ${this.o.match.page}: ${said}`);
   }
 
   /** Those in the channel now who have no Steam link, by display name. */

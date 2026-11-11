@@ -27,3 +27,8 @@ test("who someone is, is asked of the first host, whichever region the match is 
   assert.equal(homeOf(["localhost:8090", "stv.tf"]), "http://localhost:8090");
   assert.equal(matchOf("na.stv.tf/w/abc/", ["stv.tf", "na.stv.tf"])?.who, "https://stv.tf/voice/who");
 });
+
+test("a local link without http is plain http: a local stv.tf has no https", () => {
+  assert.equal(matchOf("localhost:8090/w/abc/", ["localhost:8090"])?.voice, "http://localhost:8090/w/abc/voice");
+  assert.equal(matchOf("stv.tf/w/abc/", ["stv.tf"])?.voice, "https://stv.tf/w/abc/voice");
+});
