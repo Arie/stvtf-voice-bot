@@ -4,9 +4,12 @@
 
 /** @typedef {{ steamid: string | null; discord: string; name: string }} Speaker */
 
-// Frames in a post, and the most waiting to be posted (10 s of one speaker) before the oldest go.
+// Frames in a post as they come, and at most when posts are slow (what waits of a speaker goes
+// as one); the most posts waiting before the oldest go; and how long a post may take.
 const BATCH = 5,
-  MAX_WAITING = 100;
+  MAX_POST = 30,
+  MAX_WAITING = 100,
+  POST_MS = 3000;
 
 export class Forwarder {
   /**
@@ -23,6 +26,8 @@ export class Forwarder {
     this.onStop = o.onStop ?? (() => {});
     this.onSaid = o.onSaid ?? (() => {});
     this.stopped = false;
+    /** Whether a post is on its way: what comes meanwhile waits, a speaker's as one post. */
+    this.inFlight = false;
     this.sent = 0;
     /** @type {Map<string, { speaker: Speaker; frames: string[] }>} */
     this.batches = new Map();
@@ -53,6 +58,12 @@ export class Forwarder {
     const b = this.batches.get(id);
     this.batches.delete(id);
     if (!b?.frames.length) return;
+    // Behind a slow post, onto what already waits of this speaker (the last of all, so in order).
+    const last = this.waiting.at(-1);
+    if (this.inFlight && last && last.speaker.discord === id && last.frames.length + b.frames.length <= MAX_POST) {
+      last.frames.push(...b.frames);
+      return;
+    }
     this.waiting.push(b);
     while (this.waiting.length > MAX_WAITING) this.waiting.shift();
     this.posting = this.posting.then(() => this.#post());
@@ -62,10 +73,13 @@ export class Forwarder {
     const b = this.waiting.shift();
     if (!b || this.stopped) return;
     const { steamid, discord, name } = b.speaker;
+    this.inFlight = true;
     try {
       const r = await this.fetch(this.url, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(POST_MS),
+        redirect: "error",
         body: JSON.stringify({ steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
       });
       if (r.status === 404) return this.#stop("That match is no longer being watched.");
@@ -74,6 +88,8 @@ export class Forwarder {
       this.onSaid(`${r.status} ${await r.text()}`);
     } catch (e) {
       this.onSaid(`post failed: ${/** @type {Error} */ (e).message}`);
+    } finally {
+      this.inFlight = false;
     }
   }
 

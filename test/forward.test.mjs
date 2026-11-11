@@ -87,3 +87,27 @@ test("posts say which voice channel the speaker is in", async () => {
   await f.flush();
   assert.equal(posts[0].body.channel, "42");
 });
+
+test("what waits behind a slow post goes as one post a speaker, and a post has a time limit", async () => {
+  const posts = [];
+  /** @type {(() => void)[]} */
+  const answers = [];
+  const fetch = (url, init) => {
+    posts.push({ body: JSON.parse(init.body), signal: init.signal });
+    return new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "held" })));
+  };
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
+  for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
+  await new Promise(r => setImmediate(r));
+  for (let i = 5; i < 20; i++) f.frame(speaker, Buffer.from([i]));
+  const done = f.flush();
+  await new Promise(r => setImmediate(r));
+  assert.equal(posts.length, 1, "one at a time");
+  assert.ok(posts[0].signal instanceof AbortSignal);
+  answers[0]();
+  await new Promise(r => setImmediate(r));
+  answers[1]();
+  await done;
+  assert.deepEqual(posts.map(p => p.body.frames.length), [5, 15]);
+  assert.deepEqual(posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]), [...Array(20).keys()]);
+});
