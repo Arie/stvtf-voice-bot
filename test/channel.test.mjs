@@ -51,3 +51,12 @@ test("what stv.tf is told says which channel it is of", async () => {
   await new Promise(r => setImmediate(r));
   assert.deepEqual(w.told.map(t => [t.status ?? "left", t.channel]), [["General · 1", "42"], ["left", "42"]]);
 });
+
+test("dragged to another channel, it leaves rather than record there", async () => {
+  const w = world();
+  await w.c.join();
+  w.c.update({ id: "bot", channelId: "42" }, { id: "bot", channelId: "42" });
+  assert.deepEqual(w.gone, []);
+  w.c.update({ id: "bot", channelId: "42" }, { id: "bot", channelId: "43" });
+  assert.deepEqual(w.gone, ["moved"]);
+});

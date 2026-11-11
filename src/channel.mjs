@@ -102,6 +102,19 @@ export class Channel {
     return { page: this.o.match.page, key: this.o.key, invite: this.o.match.invite, fetch: this.o.fetch };
   }
 
+  /**
+   * Someone's voice state changed on the server.
+   * @param {{ id: string; channelId: string | null }} old @param {{ id: string; channelId: string | null }} now
+   */
+  update(old, now) {
+    // The bot dragged elsewhere would record there, unsaid.
+    if (now.id === this.channel.guild.members.me?.id && now.channelId !== this.channel.id)
+      return this.leave(now.channelId ? "moved" : "disconnected");
+    if (!this.hasPeople()) return this.leave("channel empty");
+    // Someone came or went: stv.tf hears who is here now.
+    this.report();
+  }
+
   /** Whether anyone but bots is in the channel. */
   hasPeople() {
     return [...this.channel.members.values()].some(m => !m.user.bot);

@@ -114,13 +114,8 @@ client.on("interactionCreate", async i => {
   }
 });
 
-// The channel emptied of people: nothing left to pass on.
-client.on("voiceStateUpdate", old => {
-  const here = channels.get(old.guild.id);
-  if (here && !here.hasPeople()) here.leave("channel empty");
-  // Someone came or went: stv.tf hears who is here now.
-  else here?.report();
-});
+// Someone came or went, or the bot was moved.
+client.on("voiceStateUpdate", (old, now) => channels.get(old.guild.id)?.update(old, now));
 
 // Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's page).
 const mumble = HOSTS.map(host => new Jobs({ origin: homeOf([host]), key: KEY, start: (job, status) => startSession(job, status, { key: KEY }) }));
