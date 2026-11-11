@@ -36,3 +36,18 @@ test("an unlinked user is asked about again in a while, as is everyone when the 
   status = 200;
   assert.equal(await who.steamid("7"), "[U:1:9]", "linked since");
 });
+
+test("asked about by many frames at once, the site is asked once", async () => {
+  let asked = 0;
+  /** @type {(r: unknown) => void} */
+  let answer = () => {};
+  const fetch = () => {
+    asked++;
+    return new Promise(r => (answer = r));
+  };
+  const who = new Who({ url: "u", key: "k", fetch });
+  const all = [who.steamid("7"), who.steamid("7"), who.steamid("7")];
+  answer({ status: 200, ok: true, json: async () => ({ steamid: "[U:1:9]" }) });
+  assert.deepEqual(await Promise.all(all), ["[U:1:9]", "[U:1:9]", "[U:1:9]"]);
+  assert.equal(asked, 1);
+});
