@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { matchOf } from "../src/match.mjs";
+import { homeOf, matchOf } from "../src/match.mjs";
 
 const hosts = ["stv.tf", "na.stv.tf"];
 
@@ -20,4 +20,10 @@ test("the key never goes anywhere else", () => {
     assert.equal(matchOf(link, hosts), null, link);
   assert.equal(matchOf("http://stv.tf/w/abc/", hosts), null, "not without TLS");
   assert.equal(matchOf("http://localhost:8090/w/abc/", ["localhost:8090"])?.voice, "http://localhost:8090/w/abc/voice", "but a local one, for testing");
+});
+
+test("who someone is, is asked of the first host, whichever region the match is on", () => {
+  assert.equal(homeOf(["stv.tf", "na.stv.tf"]), "https://stv.tf");
+  assert.equal(homeOf(["localhost:8090", "stv.tf"]), "http://localhost:8090");
+  assert.equal(matchOf("na.stv.tf/w/abc/", ["stv.tf", "na.stv.tf"])?.who, "https://stv.tf/voice/who");
 });

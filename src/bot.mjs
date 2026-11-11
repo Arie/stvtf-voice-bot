@@ -6,7 +6,7 @@
 // stv.tf hosts voice may go to, comma separated; default the four regions).
 import { ChannelType, Client, GatewayIntentBits, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { Channel } from "./channel.mjs";
-import { matchOf } from "./match.mjs";
+import { homeOf, matchOf } from "./match.mjs";
 import { Who } from "./who.mjs";
 import { mayControl } from "./control.mjs";
 
@@ -144,7 +144,7 @@ client.on("interactionCreate", async i => {
         return await i.reply(said);
       }
       case "link":
-        return await reply(i, `Link your Steam account (through the one on your Discord profile): https://${HOSTS[0]}/voice/link`);
+        return await reply(i, `Link your Steam account (through the one on your Discord profile): ${homeOf(HOSTS)}/voice/link`);
     }
   } catch (e) {
     console.error("stvtf-voice-bot:", e);
