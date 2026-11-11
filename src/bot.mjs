@@ -171,7 +171,8 @@ for (const jobs of mumble) jobs.run();
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {
     for (const c of channels.values()) c.leave("restarting");
-    for (const jobs of mumble) jobs.stop("restarting");
+    // Mumble's goodbyes get a moment to go out.
+    await Promise.race([Promise.all(mumble.map(jobs => jobs.stop("restarting"))), new Promise(r => setTimeout(r, 2000))]);
     await client.destroy();
     process.exit(0);
   });

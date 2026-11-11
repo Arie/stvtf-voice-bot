@@ -10,7 +10,11 @@ const ASK_MS = 40_000,
   RETRY_MS = 3000;
 
 /** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; voice: string; page: string }} Job */
-/** @typedef {{ delay: number; leave: (why: string) => void }} Session */
+/** @typedef {{ delay: number; leave: (why: string) => Promise<void> | void }} Session */
+/**
+ * A job seen to: its session, once started (after the one before it in that match has closed).
+ * @typedef {{ same: string; job: Job; session: Session | null; left: boolean; ready: Promise<void> }} Entry
+ */
 
 /** An IPv6 address (as net.isIPv6 takes it) as its 16 bytes. @param {string} ip */
 function bytes6(ip) {
@@ -61,8 +65,10 @@ export class Jobs {
   constructor(o) {
     this.o = { fetch, ...o };
     this.version = 0;
-    /** @type {Map<string, { same: string; session: Session | null }>} By match. */
+    /** @type {Map<string, Entry>} By match. */
     this.sessions = new Map();
+    /** @type {Map<string, Promise<void>>} By match: the last session left, until it is closed. */
+    this.closing = new Map();
     /** @type {Promise<unknown>[]} */
     this.telling = [];
     this.stopped = false;
@@ -94,25 +100,33 @@ export class Jobs {
     for (const [match, had] of this.sessions) {
       const now = jobs.find(j => j.match === match);
       if (now && same(now) === had.same) continue;
-      had.session?.leave(now ? "moved" : "disconnected");
-      this.sessions.delete(match);
+      this.#leave(match, had, now ? "moved" : "disconnected");
     }
     for (const job of jobs) {
       const had = this.sessions.get(job.match);
       if (had) {
+        had.job.delay = job.delay;
         if (had.session) had.session.delay = job.delay;
         continue;
       }
       const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
         this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people }));
-      // One that would not be joined is not tried again until it is asked for anew.
-      let session = null;
-      try {
-        session = this.o.start(job, status);
-      } catch {
-        status("Could not join", []);
-      }
-      this.sessions.set(job.match, { same: same(job), session });
+      /** @type {Entry} */
+      const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
+      const begin = () => {
+        if (entry.left) return;
+        // One that would not be joined is not tried again until it is asked for anew.
+        try {
+          entry.session = this.o.start(entry.job, status);
+        } catch {
+          status("Could not join", []);
+        }
+      };
+      // The one before signs in by the same name: this one goes in once it is out.
+      const before = this.closing.get(job.match);
+      if (before) entry.ready = before.then(begin);
+      else begin();
+      this.sessions.set(job.match, entry);
     }
     await Promise.all(this.telling.splice(0));
     return true;
@@ -123,10 +137,19 @@ export class Jobs {
     while (!this.stopped) if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, RETRY_MS));
   }
 
-  /** Leaves every channel. @param {string} why */
+  /** @param {string} match @param {Entry} had @param {string} why */
+  #leave(match, had, why) {
+    had.left = true;
+    this.sessions.delete(match);
+    const closed = had.ready.then(() => had.session?.leave(why)).catch(() => {});
+    this.closing.set(match, closed);
+    closed.then(() => this.closing.get(match) === closed && this.closing.delete(match));
+    return closed;
+  }
+
+  /** Leaves every channel: resolves once all are closed. @param {string} why */
   stop(why) {
     this.stopped = true;
-    for (const s of this.sessions.values()) s.session?.leave(why);
-    this.sessions.clear();
+    return Promise.all([...this.sessions].map(([match, had]) => this.#leave(match, had, why)));
   }
 }

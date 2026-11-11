@@ -9,13 +9,21 @@ export function fake() {
   /** @type {{ type: string; body: Buffer }[]} */
   const got = [];
   toServer.on("data", d => got.push(...frames.push(d)));
-  return {
+  const server = {
     got,
-    connect: () => Duplex.from({ writable: toServer, readable: toClient }),
+    /** @type {Duplex | null} The client's end, once it connects. */
+    socket: null,
+    closed: false,
+    connect: () => {
+      server.socket = Duplex.from({ writable: toServer, readable: toClient });
+      server.socket.on("close", () => (server.closed = true));
+      return server.socket;
+    },
     send: (type, message) => toClient.write(frame(type, Buffer.isBuffer(message) ? message : encode(type, message))),
     sent: type => got.filter(m => m.type === type).map(m => decode(type, m.body)),
     end: () => toClient.end(),
   };
+  return server;
 }
 export const tick = () => new Promise(r => setImmediate(r));
 

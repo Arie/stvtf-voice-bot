@@ -56,3 +56,34 @@ test("once told to leave, nothing more is passed on", async () => {
   await wait(300);
   assert.equal(w.posts.flatMap(p => p.frames).length, 3);
 });
+
+test("leaving resolves once the connection is closed, joined or not yet", async () => {
+  const w = session();
+  await wait(5);
+  welcomeIn(w.server());
+  await wait(5);
+  const left = w.s.leave("done");
+  assert.ok(left instanceof Promise);
+  await left;
+  assert.equal(w.server().closed, true);
+  assert.deepEqual(w.server().sent("TextMessage").map(m => m.message).at(-1), "Leaving: done");
+
+  const early = session();
+  await wait(5);
+  await early.s.leave("done");
+  assert.equal(early.server().closed, true);
+});
+
+test("a name in use is taken with a number", async () => {
+  const w = session();
+  for (let n = 1; n <= 2; n++) {
+    await wait(5);
+    w.server().send("Reject", { type: 5, reason: "Username already in use" });
+  }
+  await wait(5);
+  assert.deepEqual(w.servers.map(s => s.sent("Authenticate")[0].username), ["stv.tf", "stv.tf 2", "stv.tf 3"]);
+  welcomeIn(w.server());
+  await wait(5);
+  assert.equal(w.statuses.at(-1), "Team Comms · 1");
+  await w.s.leave("done");
+});

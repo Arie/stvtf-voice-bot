@@ -10,6 +10,9 @@ import { Twenties } from "./repack.mjs";
 // How often what waits is sent, and how often the page is told who is in the channel.
 const FLUSH_MS = 100,
   STATUS_MS = 10_000;
+// What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
+const IN_USE = 5,
+  NAMES = 3;
 // A server on this machine or its network is joined only when said so (for trying it out).
 const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
 
@@ -48,6 +51,8 @@ export function startSession(job, status, o) {
   /** @type {ReturnType<typeof setInterval>[]} */
   const timers = [];
   let gone = false;
+  /** @type {Promise<void> | null} */
+  let closing = null;
   /** Who someone is, as stv.tf knows them. @param {{ id: string; session: number }} p */
   const idOf = p => voiceId(job.host, p);
   // How it goes, and who is in the channel: told to stv.tf.
@@ -65,47 +70,72 @@ export function startSession(job, status, o) {
       forwarder.delay = d;
       client?.say(`tv_delay: ${d} s${d ? "" : " (live)"}`);
     },
-    /** @param {string} why */
+    /** @param {string} why @returns {Promise<void>} Once its connection is closed. */
     leave(why) {
-      if (gone) return;
+      if (closing) return closing;
       gone = true;
       timers.forEach(clearInterval);
       forwarder.flush();
-      try {
-        client?.say(`Leaving: ${why}`);
-      } catch {}
-      // The goodbye gets a moment to go out.
-      setTimeout(() => client?.leave(why), 200).unref();
+      closing = (async () => {
+        if (client?.in) {
+          client.say(`Leaving: ${why}`);
+          // The goodbye gets a moment to go out.
+          await new Promise(r => setTimeout(r, 200));
+        }
+        client?.leave(why);
+        // A join under way ends once its connection is closed; one not yet begun is not begun.
+        await started;
+        await client?.closed;
+      })();
+      return closing;
     },
   };
-  (async () => {
+  /** @param {string} username */
+  const connect = username => {
+    const c = new MumbleClient({
+      host: job.host,
+      address,
+      port: job.port,
+      username,
+      password: job.password || undefined,
+      channel: job.channel,
+      connect: o.connect,
+      onVoice: v => {
+        // What comes once told to leave is not passed on.
+        if (gone) return;
+        const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
+        const who = { steamid: null, discord: idOf(v), name: v.name };
+        for (const opus of [.../** @type {Twenties} */ (packer).push(v.opus), ...(v.last ? /** @type {Twenties} */ (packer).flush() : [])])
+          forwarder.frame(who, opus);
+      },
+      onGone: why => {
+        // Only one that was in: a join that fails says so itself.
+        if (gone || !c.in) return;
+        gone = true;
+        timers.forEach(clearInterval);
+        status(`Left: ${why}`, []);
+      },
+    });
+    return c;
+  };
+  /** @type {string | undefined} */
+  let address;
+  const started = (async () => {
     try {
-      const address = await addressOf(job.host, { lookup: o.lookup });
-      client = new MumbleClient({
-        host: job.host,
-        address,
-        port: job.port,
-        username: o.name ?? "stv.tf",
-        password: job.password || undefined,
-        channel: job.channel,
-        connect: o.connect,
-        onVoice: v => {
-          // What comes once told to leave is not passed on.
-          if (gone) return;
-          const packer = packers.get(v.session) ?? packers.set(v.session, new Twenties()).get(v.session);
-          const who = { steamid: null, discord: idOf(v), name: v.name };
-          for (const opus of [.../** @type {Twenties} */ (packer).push(v.opus), ...(v.last ? /** @type {Twenties} */ (packer).flush() : [])])
-            forwarder.frame(who, opus);
-        },
-        onGone: why => {
-          if (gone) return;
-          gone = true;
-          timers.forEach(clearInterval);
-          status(`Left: ${why}`, []);
-        },
-      });
-      await client.join();
-      if (gone) return client.leave("disconnected");
+      address = await addressOf(job.host, { lookup: o.lookup });
+      // A name in use (a match before this one, still leaving) is taken with a number.
+      const name = o.name ?? "stv.tf";
+      for (let n = 1; ; n++) {
+        if (gone) return;
+        client = connect(n === 1 ? name : `${name} ${n}`);
+        try {
+          await client.join();
+          break;
+        } catch (e) {
+          if (/** @type {any} */ (e).reject !== IN_USE || n >= NAMES) throw e;
+        }
+      }
+      if (gone) return void client.leave("disconnected");
       client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
       report();
       timers.push(setInterval(() => forwarder.flush(), FLUSH_MS), setInterval(report, STATUS_MS));

@@ -67,17 +67,24 @@ export class MumbleClient {
     /** @type {(() => void) | null} Called once the server has moved it there. */
     this.moved = null;
     this.gone = false;
+    /** @type {() => void} */
+    this.wasClosed = () => {};
+    /** Resolves once the connection is closed (or none was made). @type {Promise<void>} */
+    this.closed = new Promise(r => (this.wasClosed = r));
   }
 
-  /** Signs in and goes to the channel: resolves once there, rejects with why not. */
+  /**
+   * Signs in and goes to the channel: resolves once there, rejects with why not (and, for a
+   * refusal, the Reject's type as `reject`).
+   */
   join() {
     const o = this.o;
     const connect = o.connect ?? (() => tls.connect(tlsOptions(o)));
     // Neither timer keeps the process going by itself.
     const every = o.every ?? ((f, ms) => (t => () => clearInterval(t))(setInterval(f, ms).unref()));
     return new Promise((resolve, reject) => {
-      const fail = (/** @type {string} */ why) => {
-        reject(new Error(why));
+      const fail = (/** @type {string} */ why, /** @type {number | undefined} */ type) => {
+        reject(Object.assign(new Error(why), { reject: type }));
         this.#end(why);
       };
       const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
@@ -86,14 +93,14 @@ export class MumbleClient {
       const frames = new Frames();
       this.socket.on("data", chunk => {
         try {
-          for (const m of frames.push(chunk)) this.#got(m.type, m.body, () => (done(), resolve(undefined)), why => (done(), fail(why)));
+          for (const m of frames.push(chunk)) this.#got(m.type, m.body, () => (done(), resolve(undefined)), (why, type) => (done(), fail(why, type)));
         } catch (e) {
           done();
           fail("bad reply");
         }
       });
       this.socket.on("error", e => (done(), fail(`connection failed (${e.message})`)));
-      this.socket.on("close", () => (done(), fail("connection closed")));
+      this.socket.on("close", () => (done(), fail("connection closed"), this.wasClosed()));
       this.#send("Version", { version_v1: VERSION, release: "stv.tf voice bot", os: "bot" });
       this.#send("Authenticate", { username: o.username, password: o.password, opus: true, client_type: BOT });
       this.stopPings = every(() => this.#send("Ping", { timestamp: Date.now() }), PING_MS);
@@ -106,7 +113,7 @@ export class MumbleClient {
   }
 
   /**
-   * @param {string} type @param {Buffer} body @param {() => void} joined @param {(why: string) => void} fail
+   * @param {string} type @param {Buffer} body @param {() => void} joined @param {(why: string, type?: number) => void} fail
    */
   #got(type, body, joined, fail) {
     if (type === "UDPTunnel") {
@@ -119,7 +126,7 @@ export class MumbleClient {
     const m = decode(type, body);
     switch (type) {
       case "Reject":
-        return fail(m.reason ?? "refused");
+        return fail(m.reason ?? "refused", m.type);
       case "ChannelState":
         if (m.name == null) return;
         if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS) return fail("too many channels");
@@ -184,9 +191,10 @@ export class MumbleClient {
     this.#send("TextMessage", { channel_id: [this.channel], message: text });
   }
 
-  /** Leaves the server. @param {string} [why] */
+  /** Leaves the server: resolves once the connection is closed. @param {string} [why] */
   leave(why = "left") {
     this.#end(why);
+    return this.closed;
   }
 
   /** @param {string} why */
@@ -195,6 +203,7 @@ export class MumbleClient {
     this.gone = true;
     this.stopPings?.();
     this.socket?.destroy();
+    if (!this.socket) this.wasClosed();
     this.o.onGone?.(why);
   }
 }

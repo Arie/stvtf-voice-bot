@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Jobs, isPublic } from "../src/mumble/jobs.mjs";
 
+const tick = () => new Promise(r => setImmediate(r));
 const job = (over = {}) => ({ match: "m1", invite: "inv", host: "mumble.example", port: 64738, password: "pw", channel: "Team A", delay: 90, ...over });
 
 /** A made-up stv.tf (what it wants, what it was told) and made-up Mumble sessions. */
@@ -57,6 +58,7 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
   assert.equal(w.started.length, 1);
   w.wanted = [job({ channel: "Team B" })];
   await jobs.once();
+  await tick();
   assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
   assert.equal(w.started.at(-1).job.channel, "Team B");
   w.wanted = [];
@@ -100,6 +102,7 @@ test("the same channel asked for anew is left and joined again", async () => {
   await jobs.once();
   w.wanted = [job({ asked: 2 })];
   await jobs.once();
+  await tick();
   assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
   assert.equal(w.started.length, 2);
 });
@@ -119,4 +122,22 @@ test("whatever stv.tf answers, it keeps asking", async () => {
     const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
     await jobs.once();
   }
+});
+
+test("a channel joined anew waits for the old connection to close (both sign in by one name)", async () => {
+  const w = world();
+  /** @type {() => void} */
+  let closed = () => {};
+  const start = w.start;
+  w.start = (j, status) => Object.assign(start(j, status), { leave: why => (w.left.push([j.match, j.channel, why]), new Promise(r => (closed = r))) });
+  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await jobs.once();
+  w.wanted = [job({ channel: "Team B" })];
+  await jobs.once();
+  assert.equal(w.started.length, 1, "not while the old one is still connected");
+  w.wanted = [job({ channel: "Team B", delay: 5 })];
+  await jobs.once();
+  closed();
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(w.started.map(s => [s.job.channel, s.delay]), [["Team A", 90], ["Team B", 5]]);
 });
