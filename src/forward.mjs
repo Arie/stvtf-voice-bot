@@ -10,13 +10,15 @@ const BATCH = 5,
 
 export class Forwarder {
   /**
-   * @param {{ url: string; key: string; delay: number; fetch?: typeof fetch; onStop?: (why: string) => void; onSaid?: (said: string) => void }} o
+   * @param {{ url: string; key: string; delay: number; channel?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onSaid?: (said: string) => void }} o
    */
   constructor(o) {
     this.url = o.url;
     this.key = o.key;
     /** How far the match's stream is behind the game where this channel talks, in seconds. */
     this.delay = o.delay;
+    /** The Discord voice channel these speakers are in: stv.tf takes those in one for a team. */
+    this.channel = o.channel;
     this.fetch = o.fetch ?? fetch;
     this.onStop = o.onStop ?? (() => {});
     this.onSaid = o.onSaid ?? (() => {});
@@ -64,7 +66,7 @@ export class Forwarder {
       const r = await this.fetch(this.url, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ steamid, discord, name, frames: b.frames, delay: this.delay }),
+        body: JSON.stringify({ steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
       });
       if (r.status === 404) return this.#stop("That match is no longer being watched.");
       if (r.status === 401) return this.#stop("stv.tf refused the bot's key.");

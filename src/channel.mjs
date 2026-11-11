@@ -18,7 +18,7 @@ export class Channel {
   constructor(o) {
     this.o = o;
     this.channel = o.channel;
-    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, onStop: why => this.leave(why) });
+    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, onStop: why => this.leave(why) });
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
     this.gone = false;

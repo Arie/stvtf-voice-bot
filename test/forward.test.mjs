@@ -79,3 +79,11 @@ test("the delay can change as it goes", async () => {
   await f.flush();
   assert.deepEqual(posts.map(p => p.body.delay), [90, 0]);
 });
+
+test("posts say which voice channel the speaker is in", async () => {
+  const { posts, fetch } = fake();
+  const f = new Forwarder({ url: "https://stv.tf/w/x/voice", key: "k", delay: 90, channel: "42", fetch });
+  f.frame(speaker, Buffer.from([1]));
+  await f.flush();
+  assert.equal(posts[0].body.channel, "42");
+});
