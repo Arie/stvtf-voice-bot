@@ -109,3 +109,14 @@ test("nor any range that leads back in: benchmarking, IETF, NAT64, 6to4, IPv4 in
     assert.equal(isPublic(ip), false, ip);
   for (const ip of ["198.20.0.1", "192.0.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888"]) assert.equal(isPublic(ip), true, ip);
 });
+
+test("whatever stv.tf answers, it keeps asking", async () => {
+  for (const answer of [null, { jobs: {} }, { jobs: [{ match: "m1" }] }, { jobs: [null] }, "x"]) {
+    const w = world();
+    w.fetch = async () => ({ ok: true, status: 200, json: async () => answer });
+    // As the real one does with a job of no channel.
+    const start = (j, status) => (j.channel.replace(/x/, ""), w.start(j, status));
+    const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
+    await jobs.once();
+  }
+});

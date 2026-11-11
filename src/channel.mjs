@@ -15,13 +15,15 @@ export class Channel {
   /**
    * @param {{
    *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };
-   *   delay: number; key: string; who: import("./who.mjs").Who; onGone: (why: string) => void;
-   * }} o
+   *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "steamid">; onGone: (why: string) => void;
+   *   fetch?: typeof fetch; voice?: { joinVoiceChannel: typeof joinVoiceChannel; entersState: typeof entersState };
+   * }} o `fetch` and `voice` are for tests.
    */
   constructor(o) {
     this.o = o;
     this.channel = o.channel;
-    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, invite: o.match.invite ?? undefined, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
+    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, invite: o.match.invite ?? undefined, fetch: o.fetch, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
+    this.voice = o.voice ?? { joinVoiceChannel, entersState };
     /** What stv.tf last answered, its numbers aside: logged when it changes. */
     this.answered = "";
     /** @type {Set<string>} Discord user ids heard. */
@@ -33,14 +35,16 @@ export class Channel {
 
   async join() {
     const { channel } = this;
-    this.connection = joinVoiceChannel({
+    this.connection = this.voice.joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator,
       selfDeaf: false,
       selfMute: true,
     });
-    await entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
+    // Unheard, it would end the process: it only ends this channel.
+    this.connection.on("error", () => this.leave("voice error"));
+    await this.voice.entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
     this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("disconnected"));
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
@@ -90,7 +94,12 @@ export class Channel {
     if (this.gone) return;
     const people = [...this.channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    tell({ page: this.o.match.page, key: this.o.key, invite: this.o.match.invite }, { kind: "discord", status, people });
+    tell(this.#to(), { kind: "discord", status, people });
+  }
+
+  /** Where stv.tf is told how it goes. */
+  #to() {
+    return { page: this.o.match.page, key: this.o.key, invite: this.o.match.invite, fetch: this.o.fetch };
   }
 
   /** Whether anyone but bots is in the channel. */
@@ -104,7 +113,7 @@ export class Channel {
     this.gone = true;
     clearInterval(this.timer);
     clearInterval(this.reporting);
-    tell({ page: this.o.match.page, key: this.o.key, invite: this.o.match.invite }, { kind: "discord", left: true });
+    tell(this.#to(), { kind: "discord", left: true });
     this.forwarder.stopped = true;
     try {
       this.connection?.destroy();

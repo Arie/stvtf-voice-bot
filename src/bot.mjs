@@ -53,8 +53,11 @@ const whos = new Map();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 
+// Unheard, an error would end the process; the client reconnects by itself.
+client.on("error", e => console.error("stvtf-voice-bot:", e));
+
 client.once("clientReady", async () => {
-  await client.application?.commands.set([command.toJSON()]);
+  await client.application?.commands.set([command.toJSON()]).catch(e => console.error("stvtf-voice-bot: commands not set:", e));
   console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${HOSTS.join(", ")}`);
 });
 

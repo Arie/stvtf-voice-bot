@@ -44,6 +44,10 @@ export function isPublic(ip) {
   return !((x[0] & 0xfe) === 0xfc || (x[0] === 0xfe && (x[1] & 0xc0) === 0x80) || x[0] === 0xff);
 }
 
+/** Whether stv.tf's answer holds a job the bot can do. @param {any} j @returns {j is Job} */
+const whole = j =>
+  j != null && typeof j === "object" && ["match", "host", "channel"].every(k => typeof j[k] === "string" && j[k]) && Number.isInteger(j.port);
+
 /** What makes a job another one: all but its delay. @param {Job} j */
 const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
 
@@ -79,9 +83,10 @@ export class Jobs {
       // Not answering is not being told to leave.
       return false;
     }
+    if (wanted == null || typeof wanted !== "object" || !Array.isArray(wanted.jobs ?? [])) return false;
     this.version = Number(wanted.version) || 0;
     /** @type {Job[]} */
-    const jobs = (wanted.jobs ?? []).map((/** @type {any} */ j) => ({
+    const jobs = (wanted.jobs ?? []).filter(whole).map((/** @type {any} */ j) => ({
       ...j,
       page: `${this.o.origin}/w/${j.match}/`,
       voice: `${this.o.origin}/w/${j.match}/voice`,
@@ -101,7 +106,13 @@ export class Jobs {
       const status = (/** @type {string} */ text, /** @type {{ id: string; name: string }[]} */ people) =>
         this.telling.push(tell({ page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch }, { kind: "mumble", status: text, people }));
       // One that would not be joined is not tried again until it is asked for anew.
-      this.sessions.set(job.match, { same: same(job), session: this.o.start(job, status) });
+      let session = null;
+      try {
+        session = this.o.start(job, status);
+      } catch {
+        status("Could not join", []);
+      }
+      this.sessions.set(job.match, { same: same(job), session });
     }
     await Promise.all(this.telling.splice(0));
     return true;
@@ -109,7 +120,7 @@ export class Jobs {
 
   /** Keeps asking until stopped. */
   async run() {
-    while (!this.stopped) if (!(await this.once())) await new Promise(r => setTimeout(r, RETRY_MS));
+    while (!this.stopped) if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, RETRY_MS));
   }
 
   /** Leaves every channel. @param {string} why */
