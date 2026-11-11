@@ -42,7 +42,7 @@ as recording (Mumble's own sign), and says so in the channel. It works with any 
 reach with a password; one that only lets registered certificates in must let the bot's in.
 Speakers are known by who they are on that server, and put on players on the match's page.
 Whatever length of packet they send (10 to 60 ms) is regrouped into 20 ms without decoding.
-`STVTF_MUMBLE_ANYWHERE=1` lets it join a server on this machine or its network, for trying out.
+`STVTF_MUMBLE_ANYWHERE=1` lets it join a server on this machine or its network: for trying out, and at a LAN (set it for stv.tf too).
 
 ## Deploying
 
