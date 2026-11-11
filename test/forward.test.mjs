@@ -122,3 +122,24 @@ test("posts carry the invite, and a refused one stops it", async () => {
   assert.match(why, /invite/);
   assert.equal(f.stopped, true);
 });
+
+test("behind a slow post, speakers taking turns add nothing to wait on but what waits", async () => {
+  /** @type {(() => void)[]} */
+  const answers = [];
+  let posts = 0;
+  const fetch = () => (posts++, new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" }))));
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
+  for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
+  await new Promise(r => setImmediate(r));
+  const posting = f.posting;
+  const other = { steamid: null, discord: "2", name: "b" };
+  for (let n = 0; n < 1000; n++) for (let i = 0; i < 5; i++) f.frame(n % 2 ? speaker : other, Buffer.from([i]));
+  assert.equal(f.posting, posting, "one loop drains them all");
+  assert.equal(f.waiting.length, 100);
+  for (let n = 0; n < 200 && answers.length; n++) {
+    answers.shift()();
+    await new Promise(r => setImmediate(r));
+  }
+  await f.flush();
+  assert.equal(posts, 101);
+});

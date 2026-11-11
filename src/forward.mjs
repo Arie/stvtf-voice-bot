@@ -35,7 +35,9 @@ export class Forwarder {
     this.batches = new Map();
     /** @type {{ speaker: Speaker; frames: string[] }[]} */
     this.waiting = [];
-    /** @type {Promise<void>} */
+    /** Whether a loop is posting what waits. */
+    this.draining = false;
+    /** @type {Promise<void>} The loop's, resolved once nothing waits. */
     this.posting = Promise.resolve();
   }
 
@@ -68,7 +70,19 @@ export class Forwarder {
     }
     this.waiting.push(b);
     while (this.waiting.length > MAX_WAITING) this.waiting.shift();
-    this.posting = this.posting.then(() => this.#post());
+    if (this.draining) return;
+    this.draining = true;
+    // Begun after what is queued now: a flush's batches go as they are, not onto each other.
+    this.posting = Promise.resolve().then(() => this.#drain());
+  }
+
+  /** One post at a time until nothing waits. */
+  async #drain() {
+    try {
+      while (this.waiting.length && !this.stopped) await this.#post();
+    } finally {
+      this.draining = false;
+    }
   }
 
   async #post() {
