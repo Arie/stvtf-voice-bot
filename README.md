@@ -28,4 +28,6 @@ DISCORD_TOKEN=… STVTF_VOICE_KEY=… npm start
 the hosts in `STVTF_HOSTS` (default: `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`; add
 `localhost:8090` to test against a local one). The bot needs the View Channels, Connect, Send
 Messages and Change Nickname permissions, and the `applications.commands` scope. `npm test`
-runs the tests of the parts that do not need Discord.
+runs the tests of the parts that do not need Discord. The first host is where people link Steam
+and where the bot asks who they are, for matches on any of them: only it needs the Discord
+application; all share the voice key.
