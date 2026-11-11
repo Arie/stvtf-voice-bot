@@ -92,3 +92,14 @@ test("only servers out on the internet are joined", () => {
   for (const ip of ["127.0.0.1", "10.1.2.3", "192.168.1.12", "172.16.0.1", "169.254.1.1", "100.64.0.1", "0.0.0.0", "::1", "fe80::1", "fd00::1", "::ffff:10.0.0.1"])
     assert.equal(isPublic(ip), false, ip);
 });
+
+test("the same channel asked for anew is left and joined again", async () => {
+  const w = world();
+  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  w.wanted = [job({ asked: 1 })];
+  await jobs.once();
+  w.wanted = [job({ asked: 2 })];
+  await jobs.once();
+  assert.deepEqual(w.left.map(l => l.slice(0, 2)), [["m1", "Team A"]]);
+  assert.equal(w.started.length, 2);
+});

@@ -9,7 +9,7 @@ import { tell } from "../status.mjs";
 const ASK_MS = 40_000,
   RETRY_MS = 3000;
 
-/** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; voice: string; page: string }} Job */
+/** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; voice: string; page: string }} Job */
 /** @typedef {{ delay: number; leave: (why: string) => void }} Session */
 
 /** Whether `ip` is out on the internet: not this machine, its network, or a link's own. @param {string} ip */
@@ -26,7 +26,7 @@ export function isPublic(ip) {
 }
 
 /** What makes a job another one: all but its delay. @param {Job} j */
-const same = j => [j.host, j.port, j.password, j.channel, j.invite].join("\n");
+const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
 
 export class Jobs {
   /**
