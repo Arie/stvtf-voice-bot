@@ -62,13 +62,15 @@ function writeVarint(n) {
 
 /** @param {Buffer} b @param {number} at @returns {[number, number]} The number, and where it ends. */
 function readVarint(b, at) {
-  let v = 0n;
-  for (let shift = 0n; at < b.length; shift += 7n) {
+  // Ten bytes at most (64 bits); past 2^53 it is not exact, which nothing here needs.
+  let v = 0;
+  for (let i = 0; i < 10; i++) {
+    if (at >= b.length) throw new Error("a number cut short");
     const byte = b[at++];
-    v |= BigInt(byte & 127) << shift;
-    if (byte < 128) return [Number(v), at];
+    v += (byte & 127) * 2 ** (7 * i);
+    if (byte < 128) return [v, at];
   }
-  throw new Error("a number cut short");
+  throw new Error("a number too long");
 }
 
 /** @param {string} type @param {Record<string, unknown>} message */
@@ -137,25 +139,48 @@ export function frame(type, body) {
   return Buffer.concat([head, body]);
 }
 
-// The most a message is: the server's limit is far lower; more is a broken stream.
-const MAX_MESSAGE = 8 << 20;
+// The most a message is: more than any a server sends (its own limits are far lower) is a
+// broken stream, or one meant to be.
+const MAX_MESSAGE = 1 << 20;
 
 /** The connection's bytes cut into messages, as they come. */
 export class Frames {
-  buffered = Buffer.alloc(0);
+  /** @type {Buffer[]} What has come and is not yet a whole message. */
+  chunks = [];
+  size = 0;
+  /** How much the message at the front needs in all, once its head is in. */
+  need = 0;
 
   /** @param {Buffer} chunk @returns {{ type: string; body: Buffer }[]} The messages now whole. */
   push(chunk) {
-    this.buffered = Buffer.concat([this.buffered, chunk]);
+    this.chunks.push(chunk);
+    this.size += chunk.length;
     const out = [];
-    while (this.buffered.length >= 6) {
-      const length = this.buffered.readUInt32BE(2);
-      if (length > MAX_MESSAGE) throw new Error(`a message of ${length} bytes`);
-      if (this.buffered.length < 6 + length) break;
-      const type = NAMES[this.buffered.readUInt16BE(0)] ?? `#${this.buffered.readUInt16BE(0)}`;
-      out.push({ type, body: this.buffered.subarray(6, 6 + length) });
-      this.buffered = this.buffered.subarray(6 + length);
+    for (;;) {
+      if (!this.need) {
+        if (this.size < 6) break;
+        const length = this.#front(6).readUInt32BE(2);
+        if (length > MAX_MESSAGE) throw new Error(`a message of ${length} bytes`);
+        this.need = 6 + length;
+      }
+      if (this.size < this.need) break;
+      const m = this.#front(this.need);
+      const type = NAMES[m.readUInt16BE(0)] ?? `#${m.readUInt16BE(0)}`;
+      out.push({ type, body: m.subarray(6, this.need) });
+      this.chunks[0] = m.subarray(this.need);
+      this.size -= this.need;
+      this.need = 0;
     }
     return out;
+  }
+
+  /** The first chunk, made at least `n` bytes long out of those after it. @param {number} n */
+  #front(n) {
+    if (this.chunks[0].length < n) {
+      let k = 0;
+      for (let got = 0; got < n; k++) got += this.chunks[k].length;
+      this.chunks.splice(0, k, Buffer.concat(this.chunks.slice(0, k)));
+    }
+    return this.chunks[0];
   }
 }

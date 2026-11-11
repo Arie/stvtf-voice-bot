@@ -52,3 +52,21 @@ test("an Opus packet says how long it is", () => {
   assert.equal(opusDuration(Buffer.from([0x18, 0])), 60);
   assert.equal(opusDuration(Buffer.alloc(0)), 0);
 });
+
+test("a number of more than ten bytes is a broken message, not a long wait", () => {
+  assert.throws(() => decode("Ping", Buffer.from([0x08, ...Array(10).fill(0xff), 0x01])), /too long/);
+  assert.deepEqual(decode("Ping", Buffer.from([0x08, ...Array(9).fill(0xff), 0x01])), { timestamp: 2 ** 64 - 1 });
+});
+
+test("a message of more than a server needs ends it; one coming a byte at a time takes no longer than at once", () => {
+  const head = Buffer.alloc(6);
+  head.writeUInt32BE((1 << 20) + 1, 2);
+  assert.throws(() => new Frames().push(head), /bytes/);
+  const big = frame("UDPTunnel", Buffer.alloc(200_000, 7));
+  const frames = new Frames();
+  const started = performance.now();
+  const got = [];
+  for (let i = 0; i < big.length; i++) got.push(...frames.push(big.subarray(i, i + 1)));
+  assert.ok(performance.now() - started < 1000, `${performance.now() - started} ms`);
+  assert.deepEqual(got.map(m => m.body.length), [200_000]);
+});
