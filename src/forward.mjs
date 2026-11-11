@@ -13,7 +13,7 @@ const BATCH = 5,
 
 export class Forwarder {
   /**
-   * @param {{ url: string; key: string; delay: number; channel?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onSaid?: (said: string) => void }} o
+   * @param {{ url: string; key: string; delay: number; channel?: string; invite?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onSaid?: (said: string) => void }} o
    */
   constructor(o) {
     this.url = o.url;
@@ -22,6 +22,8 @@ export class Forwarder {
     this.delay = o.delay;
     /** The Discord voice channel these speakers are in: stv.tf takes those in one for a team. */
     this.channel = o.channel;
+    /** The match's invite, from the link. */
+    this.invite = o.invite;
     this.fetch = o.fetch ?? fetch;
     this.onStop = o.onStop ?? (() => {});
     this.onSaid = o.onSaid ?? (() => {});
@@ -80,10 +82,11 @@ export class Forwarder {
         headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(POST_MS),
         redirect: "error",
-        body: JSON.stringify({ steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
+        body: JSON.stringify({ invite: this.invite, steamid, discord, name, channel: this.channel, frames: b.frames, delay: this.delay }),
       });
       if (r.status === 404) return this.#stop("That match is no longer being watched.");
       if (r.status === 401) return this.#stop("stv.tf refused the bot's key.");
+      if (r.status === 403) return this.#stop("that invite is not this match's (any more): ask for the command again.");
       if (r.ok) this.sent += b.frames.length;
       this.onSaid(`${r.status} ${await r.text()}`);
     } catch (e) {

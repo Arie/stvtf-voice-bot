@@ -9,6 +9,7 @@ test("a match or room link on a known stv.tf names where voice goes", () => {
     voice: "https://stv.tf/w/938502c33a83e5e5b9112d801cf6dd8f/voice",
     who: "https://stv.tf/voice/who",
     page: "https://stv.tf/w/938502c33a83e5e5b9112d801cf6dd8f/",
+    invite: null,
   });
   const room = matchOf("https://na.stv.tf/r/2a691c2acaaf7c67dc3a3d48b0d2b66b/?t=12:00", hosts);
   assert.equal(room?.voice, "https://na.stv.tf/r/2a691c2acaaf7c67dc3a3d48b0d2b66b/voice");
@@ -31,4 +32,13 @@ test("who someone is, is asked of the first host, whichever region the match is 
 test("a local link without http is plain http: a local stv.tf has no https", () => {
   assert.equal(matchOf("localhost:8090/w/abc/", ["localhost:8090"])?.voice, "http://localhost:8090/w/abc/voice");
   assert.equal(matchOf("stv.tf/w/abc/", ["stv.tf"])?.voice, "https://stv.tf/w/abc/voice");
+});
+
+test("the link carries the match's invite, without which there is no joining", () => {
+  const m = matchOf("https://stv.tf/w/abc/?voice=0123456789abcdef", ["stv.tf"]);
+  assert.equal(m?.invite, "0123456789abcdef");
+  assert.equal(m?.voice, "https://stv.tf/w/abc/voice");
+  assert.equal(matchOf("https://stv.tf/r/abc/?t=1&voice=0123456789abcdef", ["stv.tf"])?.invite, "0123456789abcdef");
+  assert.equal(matchOf("https://stv.tf/w/abc/", ["stv.tf"])?.invite, null, "a plain page link has none");
+  assert.equal(matchOf("https://stv.tf/w/abc/?voice=not%20hex", ["stv.tf"])?.invite, null);
 });

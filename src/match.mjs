@@ -11,7 +11,7 @@ export const homeOf = hosts => `${LOCAL.test(hosts[0]) ? "http" : "https"}://${h
 /**
  * @param {string} link A match (`/w/<id>/`) or room (`/r/<id>/`) page on stv.tf, with or without `https://`.
  * @param {string[]} hosts The hosts voice may go to; `localhost` ones also over plain http.
- * @returns {{ voice: string; who: string; page: string } | null}
+ * @returns {{ voice: string; who: string; page: string; invite: string | null } | null}
  */
 export function matchOf(link, hosts) {
   let url;
@@ -27,5 +27,7 @@ export function matchOf(link, hosts) {
   const m = url.pathname.match(/^\/([wr])\/([0-9a-z]{1,64})(\/|$)/);
   if (!m) return null;
   const page = `${url.origin}/${m[1]}/${m[2]}/`;
-  return { voice: `${page}voice`, who: `${homeOf(hosts)}/voice/who`, page };
+  // The invite stv.tf gave whoever started the match, or a caster: no voice comes in without it.
+  const invite = url.searchParams.get("voice");
+  return { voice: `${page}voice`, who: `${homeOf(hosts)}/voice/who`, page, invite: invite && /^[0-9a-f]{8,64}$/.test(invite) ? invite : null };
 }

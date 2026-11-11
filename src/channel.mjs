@@ -11,14 +11,14 @@ const FLUSH_MS = 100,
 export class Channel {
   /**
    * @param {{
-   *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string };
+   *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };
    *   delay: number; key: string; who: import("./who.mjs").Who; onGone: (why: string) => void;
    * }} o
    */
   constructor(o) {
     this.o = o;
     this.channel = o.channel;
-    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
+    this.forwarder = new Forwarder({ url: o.match.voice, key: o.key, delay: o.delay, channel: o.channel.id, invite: o.match.invite ?? undefined, onStop: why => this.leave(why), onSaid: said => this.#log(said) });
     /** What stv.tf last answered, its numbers aside: logged when it changes. */
     this.answered = "";
     /** @type {Set<string>} Discord user ids heard. */

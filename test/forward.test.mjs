@@ -111,3 +111,14 @@ test("what waits behind a slow post goes as one post a speaker, and a post has a
   assert.deepEqual(posts.map(p => p.body.frames.length), [5, 15]);
   assert.deepEqual(posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]), [...Array(20).keys()]);
 });
+
+test("posts carry the invite, and a refused one stops it", async () => {
+  const { posts, fetch } = fake(() => ({ status: 403, text: "not invited" }));
+  let why = "";
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, invite: "abc", fetch, onStop: w => (why = w) });
+  f.frame(speaker, Buffer.from([1]));
+  await f.flush();
+  assert.equal(posts[0].body.invite, "abc");
+  assert.match(why, /invite/);
+  assert.equal(f.stopped, true);
+});

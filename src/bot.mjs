@@ -35,7 +35,7 @@ const command = new SlashCommandBuilder()
     s
       .setName("join")
       .setDescription("Join your voice channel and pass what is said to a match on stv.tf")
-      .addStringOption(o => o.setName("link").setDescription("The match's or room's page on stv.tf").setRequired(true))
+      .addStringOption(o => o.setName("link").setDescription("The link stv.tf gave for this match's Discord voice (its page, with the invite)").setRequired(true))
       .addNumberOption(delayOption),
   )
   .addSubcommand(s => s.setName("leave").setDescription("Leave the voice channel"))
@@ -68,6 +68,8 @@ async function join(i) {
     return reply(i, "I am already in a channel on this server: `/stv leave` first.");
   const match = matchOf(i.options.getString("link", true), HOSTS);
   if (!match) return reply(i, `That is not a match or room page on ${HOSTS[0]}.`);
+  if (!match.invite)
+    return reply(i, "That link has no invite. Whoever started the match on stv.tf, or a caster, gets the `/stv join` command to paste here from the match's page (the 🔊 list, Discord voice).");
   const delay = i.options.getNumber("delay") ?? DEFAULT_DELAY;
   // Held from here on: a second join meanwhile is told so.
   joining.add(i.guild.id);
