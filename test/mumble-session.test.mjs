@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tlsOptions } from "../src/mumble/client.mjs";
-import { addressOf, startSession } from "../src/mumble/session.mjs";
+import { addressOf, nameOf, startSession } from "../src/mumble/session.mjs";
 import { fake, tick, welcomeIn } from "./fake-mumble.mjs";
 import { fetchOf } from "./stand.mjs";
 
@@ -135,7 +135,7 @@ test("a name in use is taken with a number", async () => {
   await wait(5);
   assert.deepEqual(
     w.servers.map(s => s.sent("Authenticate")[0].username),
-    ["stv.tf", "stv.tf 2", "stv.tf 3"],
+    ["stv.tf-m1", "stv.tf-m1-b", "stv.tf-m1-c"],
   );
   welcomeIn(w.server());
   await wait(5);
@@ -149,4 +149,22 @@ test("told to leave while joining, it says nothing more", async () => {
   await w.s.leave("moved");
   await wait(5);
   assert.deepEqual(w.statuses, []);
+});
+
+test("each match's channel has a name of its own on a server, with no space in it", () => {
+  const one = {
+    match: "5d4f1b22ac95fbb47505b19a2c24b994",
+    host: "h",
+    port: 1,
+    password: "",
+    channel: "c",
+    delay: 0,
+    invite: "i",
+    voice: "",
+    page: "",
+  };
+  assert.equal(nameOf(one), "stv.tf-5d4f1b");
+  assert.equal(nameOf({ ...one, job: 1 }), "stv.tf-5d4f1b");
+  assert.equal(nameOf({ ...one, job: 2 }), "stv.tf-5d4f1b-2");
+  assert.notEqual(nameOf(one), nameOf({ ...one, match: "aaaaaa22ac95fbb47505b19a2c24b994" }));
 });

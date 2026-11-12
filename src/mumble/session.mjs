@@ -10,6 +10,14 @@ import { Twenties } from "./repack.mjs";
 // How often what waits is sent, and how often the page is told who is in the channel.
 const FLUSH_MS = 100,
   STATUS_MS = 10_000;
+/**
+ * The name the bot signs in by for a job: its match's and channel's own. A server lets a second
+ * of one name in by putting the first out, so two channels, or two matches on one server, must
+ * not share one; and a name takes no space on most servers.
+ * @param {import("./jobs.mjs").Job} job
+ */
+export const nameOf = job => `stv.tf-${job.match.slice(0, 6)}${(job.job ?? 1) > 1 ? `-${job.job}` : ""}`;
+
 // What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
 const IN_USE = 5,
   NAMES = 3;
@@ -139,12 +147,12 @@ class MumbleSession {
     }
   }
 
-  /** In the channel; a name in use (a match before this one, still leaving) is taken with a number. */
+  /** In the channel; a name in use all the same is taken with a letter after it. */
   async #join() {
-    const name = this.o.name ?? "stv.tf";
+    const name = this.o.name ?? nameOf(this.job);
     for (let n = 1; ; n++) {
       if (this.gone) return null;
-      const client = (this.client = this.#client(n === 1 ? name : `${name} ${n}`));
+      const client = (this.client = this.#client(n === 1 ? name : `${name}-${"abc"[n - 1]}`));
       try {
         await client.join();
         return client;
