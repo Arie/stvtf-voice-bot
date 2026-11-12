@@ -1,10 +1,28 @@
 # stvtf-voice-bot
 
-A Discord bot that sits in a voice channel and passes what is said to a live match on
-[stv.tf](https://stv.tf), where it is heard as the speakers' players: on the site, and in TF2
-through a room's relay. A team's comms come out as late as the match's SourceTV (`tv_delay`),
+A bot that sits in a team's voice channel, in Discord or Mumble, and passes what is said to a
+live match on [stv.tf](https://stv.tf), where it is heard as the speakers' players: on the site,
+and in TF2 through a room's relay. A team's comms come out as late as the match's SourceTV (`tv_delay`),
 held by the stream's ticks so a pause or a lagging server does not put them out of step; with
 `delay:0` it is live commentary by people watching the stream.
+
+## What leaves the channel
+
+The bot records, and shows it: in Discord its name becomes `stv.tf ● recording` and it says so
+in the channel; in Mumble it carries the recording sign and says so in the channel's chat. While
+it is there, this goes to the stv.tf the match is on:
+
+- **Voice**: every speaker's audio, as it is said. Anyone watching the match on stv.tf hears it
+  (as late as the match itself), and it is written into the match's demo, which anyone with the
+  match's page can download for two weeks.
+- **Who is there**: the id and display name of everyone in the channel, speaking or not (Discord
+  user ids; in Mumble the name and the certificate's hash), so whoever runs the match can say
+  which player each is. stv.tf remembers that from one match to the next.
+- **Steam links**: each Discord user's id is asked of stv.tf, for the Steam account they linked
+  there (`/stv link`).
+
+Nothing is kept by the bot itself. It leaves when told to, when the channel is empty, when it is
+moved, and when the match ends.
 
 ## Commands
 
@@ -22,15 +40,21 @@ teams in one server).
 
 ## Running
 
+It is one half of a pair: it only talks to stv.tf servers ([stvtf-web](https://github.com/Arie/stvtf-web))
+started with the same `STVTF_VOICE_KEY`. The one at stv.tf is the author's; to run your own, run
+stvtf-web too and name it in `STVTF_HOSTS`.
+
 ```
-DISCORD_TOKEN=… STVTF_VOICE_KEY=… npm start
+npm ci
+DISCORD_TOKEN=… STVTF_VOICE_KEY=… STVTF_HOSTS=your.host npm start
 ```
 
-`STVTF_VOICE_KEY` is the key the stv.tf servers were started with; voice is only ever posted to
-the hosts in `STVTF_HOSTS` (default: `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`; add
-`localhost:8090` to test against a local one). The bot needs the View Channels, Connect, Send
-Messages and Change Nickname permissions, and the `applications.commands` scope. `npm test`
-runs the tests of the parts that do not need Discord. The first host is where people link Steam
+Node 22 or later. `STVTF_VOICE_KEY` is the key the stv.tf servers were started with; voice is
+only ever posted to the hosts in `STVTF_HOSTS` (default: `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`;
+`localhost:8090` for a local one). In Discord the bot is invited with the `bot` and
+`applications.commands` scopes and the View Channels, Connect, Send Messages and Change Nickname
+permissions; it uses no privileged intents. `npm test` runs the tests, none of which need
+Discord or a Mumble server. The first host is where people link Steam
 and where the bot asks who they are, for matches on any of them: only it needs the Discord
 application; all share the voice key.
 
@@ -38,7 +62,7 @@ application; all share the voice key.
 
 | command | |
 |---|---|
-| `script/test` | every check: eslint, prettier, tsc, shellcheck, hadolint, the tests and `npm audit` (`--help` for the rest) |
+| `script/test` | every check: eslint, prettier, tsc, shellcheck, hadolint, actionlint, zizmor, the tests and `npm audit` (`--help` for the rest); the linters `mise.toml` pins are programs of their own (`mise install`), skipped when not installed |
 | `script/test --fix` | fixes what eslint and prettier can, then checks |
 
 Before each commit, the quick ones (all but the audit), once enabled with
@@ -52,7 +76,8 @@ as recording (Mumble's own sign), and says so in the channel. It works with any 
 reach with a password; one that only lets registered certificates in must let the bot's in.
 Speakers are known by who they are on that server, and put on players on the match's page.
 Whatever length of packet they send (10 to 60 ms) is regrouped into 20 ms without decoding.
-`STVTF_MUMBLE_ANYWHERE=1` lets it join a server on this machine or its network: for trying out, and at a LAN (set it for stv.tf too).
+`STVTF_MUMBLE_ANYWHERE=1` lets it join a server on this machine or its network: for trying out,
+and at a LAN. stv.tf refuses such servers too, until it is started with the same setting.
 
 ## Deploying
 

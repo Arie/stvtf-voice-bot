@@ -2,7 +2,7 @@
   "name": "stvtf-voice-bot",
   "private": true,
   "type": "module",
-  "description": "A Discord bot that sits in a voice channel and passes its speakers' voice to a match on stv.tf",
+  "description": "A bot that sits in a team's Discord or Mumble voice channel and passes its speakers' voice to a match on stv.tf",
   "license": "MIT",
   "engines": {
     "node": ">=22"

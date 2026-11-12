@@ -2,7 +2,8 @@
 // (src/mumble), says it is recording, and passes what is said to a match on stv.tf.
 //
 // Environment: DISCORD_TOKEN; STVTF_VOICE_KEY (the key stv.tf takes voice with); STVTF_HOSTS (the
-// stv.tf hosts voice may go to, comma separated; default the four regions).
+// stv.tf hosts voice may go to, comma separated; default the four regions); STVTF_MUMBLE_ANYWHERE=1
+// (a Mumble server may be on this machine or its network: for trying out, and at a LAN).
 import { startDiscord } from "./discord/bot.mjs";
 import { startMumble } from "./mumble/bot.mjs";
 
