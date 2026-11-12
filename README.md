@@ -49,7 +49,7 @@ npm ci
 DISCORD_TOKEN=… STVTF_VOICE_KEY=… STVTF_HOSTS=your.host npm start
 ```
 
-Node 22 or later. `STVTF_VOICE_KEY` is the key the stv.tf servers were started with; voice is
+Node 26 or later. `STVTF_VOICE_KEY` is the key the stv.tf servers were started with; voice is
 only ever posted to the hosts in `STVTF_HOSTS` (default: `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`;
 `localhost:8090` for a local one). In Discord the bot is invited with the `bot` and
 `applications.commands` scopes and the View Channels, Connect, Send Messages and Change Nickname

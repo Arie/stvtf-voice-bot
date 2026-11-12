@@ -5,7 +5,7 @@
   "description": "A bot that sits in a team's Discord or Mumble voice channel and passes its speakers' voice to a match on stv.tf",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "scripts": {
     "start": "node src/bot.mjs",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@types/node": "22.20.5",
+    "@types/node": "26.6.6",
     "eslint": "10.14.0",
     "globals": "17.14.0",
     "prettier": "3.9.10",

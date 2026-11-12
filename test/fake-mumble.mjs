@@ -15,7 +15,8 @@ export function fake() {
     socket: null,
     closed: false,
     connect: () => {
-      server.socket = Duplex.from({ writable: toServer, readable: toClient });
+      // Node's types want web streams here; a pair of Node streams works.
+      server.socket = Duplex.from(/** @type {any} */ ({ writable: toServer, readable: toClient }));
       server.socket.on("close", () => (server.closed = true));
       return server.socket;
     },

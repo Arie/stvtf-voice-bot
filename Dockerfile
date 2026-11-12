@@ -1,5 +1,5 @@
 # The stv.tf voice bot: one small Node process.
-FROM node:22-slim
+FROM node:26-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
