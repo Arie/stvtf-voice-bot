@@ -9,7 +9,7 @@ import { fetchOf } from "./stand.mjs";
 /**
  * @typedef {{
  *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, status: Status) => Started | null;
- *   told: { url: string; status?: string; asked?: number; channel?: string }[]; started: Started[]; left: [string, string, string][];
+ *   told: { url: string; status?: string; asked?: number; channel?: string; job?: number }[]; started: Started[]; left: [string, string, string][];
  * }} World
  */
 
@@ -233,4 +233,28 @@ test("a stv.tf that refuses the key is asked again much later than one that is d
   const refused = new Jobs({ origin: "https://stv.tf", key: "wrong", fetch: w.fetch, start: w.start });
   await refused.once();
   assert.ok(refused.retryIn() >= 20 * down, `${refused.retryIn()} against ${down}`);
+});
+
+test("two channels wanted for one match are each sat in, and each left by itself", async () => {
+  const w = world();
+  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  w.wanted = [job({ job: 1, channel: "Red" }), job({ job: 2, channel: "Blu" })];
+  await jobs.once();
+  assert.deepEqual(
+    w.started.map(s => s.job.channel),
+    ["Red", "Blu"],
+  );
+  assert.deepEqual(
+    w.told.map(t => t.job),
+    [1, 2],
+    "stv.tf is told which of the two each word is of",
+  );
+  w.wanted = [job({ job: 2, channel: "Blu" })];
+  await jobs.once();
+  await tick();
+  assert.deepEqual(
+    w.left.map(l => l[1]),
+    ["Red"],
+  );
+  assert.equal(w.started.length, 2, "the one that stays is not joined anew");
 });

@@ -11,7 +11,7 @@ const ASK_MS = 40_000,
   // A stv.tf that will not have the key: a wrong one stays wrong.
   REFUSED_MS = 60_000;
 
-/** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; voice: string; page: string }} Job */
+/** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; job?: number; voice: string; page: string }} Job */
 /** @typedef {{ delay: number; leave: (why: string) => Promise<void> | void }} Session */
 /**
  * A job seen to: its session, once started (after the one before it in that match has closed).
@@ -79,6 +79,9 @@ const whole = j => {
   return ["match", "host", "channel"].every(k => typeof o[k] === "string" && o[k]) && Number.isInteger(o.port);
 };
 
+/** Which of what is wanted a job is: its match, and which of that match's channels. @param {Job} j */
+const keyOf = j => `${j.match}#${j.job ?? ""}`;
+
 /** What makes a job another one: all but its delay. @param {Job} j */
 const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
 
@@ -92,9 +95,9 @@ export class Jobs {
   constructor(o) {
     this.o = { fetch, ...o };
     this.version = 0;
-    /** @type {Map<string, Entry>} By match. */
+    /** @type {Map<string, Entry>} By match and which of its channels (`keyOf`). */
     this.sessions = new Map();
-    /** @type {Map<string, Promise<void>>} By match: the last session left, until it is closed. */
+    /** @type {Map<string, Promise<void>>} By the same: the last session left, until it is closed. */
     this.closing = new Map();
     /** @type {Promise<unknown>[]} */
     this.telling = [];
@@ -107,13 +110,13 @@ export class Jobs {
   async once() {
     const jobs = await this.#ask();
     if (!jobs) return false;
-    for (const [match, had] of this.sessions) {
-      const now = jobs.find(j => j.match === match);
+    for (const [key, had] of this.sessions) {
+      const now = jobs.find(j => keyOf(j) === key);
       if (now && same(now) === had.same) continue;
-      this.#leave(match, had, now ? "moved" : "disconnected");
+      this.#leave(key, had, now ? "moved" : "disconnected");
     }
     for (const job of jobs) {
-      const had = this.sessions.get(job.match);
+      const had = this.sessions.get(keyOf(job));
       if (!had) this.#begin(job);
       else {
         had.job.delay = job.delay;
@@ -157,7 +160,7 @@ export class Jobs {
       void this.telling.push(
         tell(
           { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
-          { kind: "mumble", status: text, people, asked: job.asked, channel: channelOf(job) },
+          { kind: "mumble", status: text, people, asked: job.asked, job: job.job, channel: channelOf(job) },
         ),
       );
     /** @type {Entry} */
@@ -172,10 +175,10 @@ export class Jobs {
       }
     };
     // The one before signs in by the same name: this one goes in once it is out.
-    const before = this.closing.get(job.match);
+    const before = this.closing.get(keyOf(job));
     if (before) entry.ready = before.then(begin);
     else begin();
-    this.sessions.set(job.match, entry);
+    this.sessions.set(keyOf(job), entry);
   }
 
   /** How long to wait before asking again after no answer, in milliseconds. */
@@ -189,19 +192,19 @@ export class Jobs {
       if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, this.retryIn()));
   }
 
-  /** @param {string} match @param {Entry} had @param {string} why */
-  #leave(match, had, why) {
+  /** @param {string} key Which it is (`keyOf`). @param {Entry} had @param {string} why */
+  #leave(key, had, why) {
     had.left = true;
-    this.sessions.delete(match);
+    this.sessions.delete(key);
     const closed = had.ready.then(() => had.session?.leave(why)).catch(() => {});
-    this.closing.set(match, closed);
-    closed.then(() => this.closing.get(match) === closed && this.closing.delete(match));
+    this.closing.set(key, closed);
+    closed.then(() => this.closing.get(key) === closed && this.closing.delete(key));
     return closed;
   }
 
   /** Leaves every channel: resolves once all are closed. @param {string} why */
   stop(why) {
     this.stopped = true;
-    return Promise.all([...this.sessions].map(([match, had]) => this.#leave(match, had, why)));
+    return Promise.all([...this.sessions].map(([key, had]) => this.#leave(key, had, why)));
   }
 }
