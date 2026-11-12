@@ -18,7 +18,15 @@ updates:
         dependency-type: production
       dev-tools:
         dependency-type: development
+    # Follows the Node the image runs: moved by hand, with it.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    # A Node major is moved by hand, to an LTS.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
