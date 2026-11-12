@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
-import { Channel } from "../src/channel.mjs";
+import { Channel } from "../src/discord/channel.mjs";
 import { fetchOf, stand } from "./stand.mjs";
 
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */

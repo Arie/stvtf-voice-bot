@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { join } from "../src/join.mjs";
+import { join } from "../src/discord/join.mjs";
 import { stand } from "./stand.mjs";
 
 /** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
 /** @typedef {Parameters<typeof join>[1]} Options */
-/** @typedef {import("../src/join.mjs").Joined & { o: Parameters<Options["makeChannel"]>[0] }} Made */
+/** @typedef {import("../src/discord/join.mjs").Joined & { o: Parameters<Options["makeChannel"]>[0] }} Made */
 
 /**
  * A made-up `/stv join`, with what the bot said, and a made-up channel to join.

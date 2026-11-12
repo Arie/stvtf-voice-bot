@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Who } from "../src/who.mjs";
+import { Who } from "../src/discord/who.mjs";
 import { fetchOf } from "./stand.mjs";
 
 test("a linked Discord user is their SteamID, asked once", async () => {

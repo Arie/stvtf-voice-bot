@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mayControl } from "../src/control.mjs";
+import { mayControl } from "../src/discord/control.mjs";
 
 test("only someone in the bot's voice channel changes its delay or sends it away", () => {
   assert.equal(mayControl("1", "1"), true);

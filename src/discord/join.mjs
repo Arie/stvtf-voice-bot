@@ -1,6 +1,6 @@
 // `/stv join`: into the caller's voice channel, for the match its link names.
 import { ChannelType, MessageFlags } from "discord.js";
-import { matchOf } from "./match.mjs";
+import { matchOf } from "../match.mjs";
 
 /**
  * @typedef {{
