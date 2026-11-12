@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "A bot that sits in a team's Discord or Mumble voice channel and passes its speakers' voice to a match on stv.tf",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
   },
