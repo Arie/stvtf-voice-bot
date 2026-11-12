@@ -7,7 +7,9 @@ import { tell } from "../status.mjs";
 
 // How long stv.tf may keep a question open, and how long to wait after it did not answer.
 const ASK_MS = 40_000,
-  RETRY_MS = 3000;
+  RETRY_MS = 3000,
+  // A stv.tf that will not have the key: a wrong one stays wrong.
+  REFUSED_MS = 60_000;
 
 /** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; voice: string; page: string }} Job */
 /** @typedef {{ delay: number; leave: (why: string) => Promise<void> | void }} Session */
@@ -97,6 +99,8 @@ export class Jobs {
     /** @type {Promise<unknown>[]} */
     this.telling = [];
     this.stopped = false;
+    /** Whether stv.tf last refused the key. */
+    this.refused = false;
   }
 
   /** Asks what is wanted (waiting for a change, once it knows how things stand) and sees to it. */
@@ -129,6 +133,7 @@ export class Jobs {
         signal: AbortSignal.timeout(ASK_MS),
         redirect: "error",
       });
+      this.refused = r.status === 401;
       if (!r.ok) return null;
       wanted = await r.json();
     } catch {
@@ -173,9 +178,15 @@ export class Jobs {
     this.sessions.set(job.match, entry);
   }
 
+  /** How long to wait before asking again after no answer, in milliseconds. */
+  retryIn() {
+    return this.refused ? REFUSED_MS : RETRY_MS;
+  }
+
   /** Keeps asking until stopped. */
   async run() {
-    while (!this.stopped) if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, RETRY_MS));
+    while (!this.stopped)
+      if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, this.retryIn()));
   }
 
   /** @param {string} match @param {Entry} had @param {string} why */

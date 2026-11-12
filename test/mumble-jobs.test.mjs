@@ -221,3 +221,16 @@ test("what the page is told says which ask, and which channel, it is of", async 
   await jobs.once();
   assert.deepEqual([w.told[0].asked, w.told[0].channel], [3, "mumble:mumble.example:Team_A_1"]);
 });
+
+test("a stv.tf that refuses the key is asked again much later than one that is down", async () => {
+  const w = world();
+  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  w.down = true;
+  await jobs.once();
+  const down = jobs.retryIn();
+  w.down = false;
+  w.fetch = fetchOf(async () => ({ ok: false, status: 401 }));
+  const refused = new Jobs({ origin: "https://stv.tf", key: "wrong", fetch: w.fetch, start: w.start });
+  await refused.once();
+  assert.ok(refused.retryIn() >= 20 * down, `${refused.retryIn()} against ${down}`);
+});
