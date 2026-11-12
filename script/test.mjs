@@ -24,6 +24,8 @@ const TASKS = {
   tsc: { section: "checks", cmd: "npm run --silent typecheck", needs: [NPM] },
   shellcheck: { section: "checks", cmd: "shellcheck bin/build bin/deploy script/test .githooks/pre-commit" },
   hadolint: { section: "checks", cmd: "hadolint Dockerfile" },
+  actionlint: { section: "checks", cmd: "actionlint" },
+  zizmor: { section: "checks", cmd: "zizmor --offline --quiet .github/workflows" },
   "unit-tests": { section: "tests", cmd: "npm test --silent", needs: [NPM] },
   // Fetches the advisory database.
   "npm-audit": { section: "audit", cmd: "npm audit --omit=dev" },
