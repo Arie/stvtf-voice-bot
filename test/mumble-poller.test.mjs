@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { JobPoller, isPublic } from "../src/mumble/jobs.mjs";
+import { JobPoller } from "../src/mumble/poller.mjs";
 import { fetchOf } from "./stand.mjs";
 
-/** @typedef {import("../src/mumble/jobs.mjs").Job} Job */
+/** @typedef {import("../src/mumble/job.mjs").Job} Job */
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /** @typedef {{ job: Job; onStatus: OnStatus; delay: number; leave: (why: string) => Promise<void> | void }} Started */
 /**
@@ -119,24 +119,6 @@ test("a server that cannot be joined is said so, and not tried over and over", a
   assert.match(w.told[0].status ?? "", /Wrong server password/);
 });
 
-test("only servers out on the internet are joined", () => {
-  for (const ip of ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"]) assert.equal(isPublic(ip), true, ip);
-  for (const ip of [
-    "127.0.0.1",
-    "10.1.2.3",
-    "192.168.1.12",
-    "172.16.0.1",
-    "169.254.1.1",
-    "100.64.0.1",
-    "0.0.0.0",
-    "::1",
-    "fe80::1",
-    "fd00::1",
-    "::ffff:10.0.0.1",
-  ])
-    assert.equal(isPublic(ip), false, ip);
-});
-
 test("the same channel asked for anew is left and joined again", async () => {
   const w = world();
   const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
@@ -150,25 +132,6 @@ test("the same channel asked for anew is left and joined again", async () => {
     [["m1", "Team A"]],
   );
   assert.equal(w.started.length, 2);
-});
-
-test("nor any range that leads back in: benchmarking, IETF, NAT64, 6to4, IPv4 in IPv6 however written", () => {
-  for (const ip of [
-    "198.18.0.1",
-    "198.19.255.1",
-    "192.0.0.8",
-    "64:ff9b::a00:1",
-    "64:ff9b::808:808",
-    "2002:a00:1::1",
-    "::ffff:a00:1",
-    "::ffff:127.0.0.1",
-    "0:0:0:0:0:ffff:7f00:1",
-    "::127.0.0.1",
-    "::",
-  ])
-    assert.equal(isPublic(ip), false, ip);
-  for (const ip of ["198.20.0.1", "192.0.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888"])
-    assert.equal(isPublic(ip), true, ip);
 });
 
 test("whatever stv.tf answers, it keeps asking", async () => {

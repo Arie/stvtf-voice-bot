@@ -1,52 +1,27 @@
 // The bot in one Mumble channel for one match: every speaker's voice regrouped into packets of
 // 20 ms and passed to stv.tf, each known by who they are on that server (registered, or their
 // certificate), so the match's page can put them on a player and keep them there.
-import dns from "node:dns/promises";
 import { Forwarder } from "../forward.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
-import { channelOf, isPublic } from "./jobs.mjs";
+import { addressOf } from "./address.mjs";
+import { channelOf, nameOf } from "./job.mjs";
 import { Repacker20ms } from "./repack.mjs";
 
 // How often what waits is sent, and how often the page is told who is in the channel.
 const FLUSH_MS = 100,
   STATUS_MS = 10_000;
-/**
- * The name the bot signs in by for a job: its match's and channel's own. A server lets a second
- * of one name in by putting the first out, so two channels, or two matches on one server, must
- * not share one. Hyphens join its parts: most servers allow no space in a name.
- * @param {import("./jobs.mjs").Job} job
- */
-export const nameOf = job => `stv.tf-${job.match.slice(0, 6)}${(job.slot ?? 1) > 1 ? `-${job.slot}` : ""}`;
-
 // What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
 const IN_USE = 5,
   NAMES = 3;
-// A server on this machine or its network is joined only when said so (for trying it out).
-const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
-
-/** @typedef {(host: string, o: { all: true }) => Promise<{ address: string }[]>} Lookup */
-
-/**
- * Where to reach `host`: one of its addresses, once every one is known to be out on the internet
- * (a name can give one public and one private, and a second lookup another).
- * @param {string} host @param {{ lookup?: Lookup; anywhere?: boolean }} [o]
- */
-export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE } = {}) {
-  const all = await lookup(host, { all: true });
-  if (!all.length) throw new Error("no address");
-  if (!anywhere && !all.every(a => isPublic(a.address))) throw new Error("private address");
-  return all[0].address;
-}
-
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
- * @typedef {{ key: string; name?: string; lookup?: Lookup; connect?: () => import("node:stream").Duplex;
+ * @typedef {{ key: string; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch }} Options `lookup`, `connect` and `fetch` are for tests.
  */
 
 /**
- * @param {import("./jobs.mjs").Job} job @param {OnStatus} onStatus @param {Options} o
- * @returns {import("./jobs.mjs").Session}
+ * @param {import("./job.mjs").Job} job @param {OnStatus} onStatus @param {Options} o
+ * @returns {import("./poller.mjs").Session}
  */
 export function startSession(job, onStatus, o) {
   return new MumbleSession(job, onStatus, o);
@@ -66,7 +41,7 @@ class MumbleSession {
   /** @type {string | undefined} */
   address;
 
-  /** @param {import("./jobs.mjs").Job} job @param {OnStatus} onStatus @param {Options} o */
+  /** @param {import("./job.mjs").Job} job @param {OnStatus} onStatus @param {Options} o */
   constructor(job, onStatus, o) {
     this.job = job;
     this.onStatus = onStatus;

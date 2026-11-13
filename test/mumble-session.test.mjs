@@ -1,35 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tlsOptions } from "../src/mumble/client.mjs";
-import { addressOf, nameOf, startSession } from "../src/mumble/session.mjs";
-import { fake, tick, welcomeIn } from "./fake-mumble.mjs";
+import { nameOf } from "../src/mumble/job.mjs";
+import { startSession } from "../src/mumble/session.mjs";
+import { fake, lookupOf, tick, welcomeIn } from "./fake-mumble.mjs";
 import { fetchOf } from "./stand.mjs";
 
 /** @typedef {import("./fake-mumble.mjs").Server} Server */
-
-/** @param {string[]} ips @returns {import("../src/mumble/session.mjs").Lookup} */
-const lookup = ips => async (host, o) => (
-  assert.equal(o.all, true),
-  ips.map(address => ({ address, family: address.includes(":") ? 6 : 4 }))
-);
-
-test("a server is joined at an address checked, every one of its addresses public", async () => {
-  assert.equal(
-    await addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "2606:2800:220:1::1"]) }),
-    "93.184.216.34",
-  );
-  await assert.rejects(
-    addressOf("mumble.example", { lookup: lookup(["93.184.216.34", "10.0.0.1"]) }),
-    /private address/,
-  );
-  await assert.rejects(addressOf("mumble.example", { lookup: lookup(["::1", "93.184.216.34"]) }), /private address/);
-  await assert.rejects(addressOf("mumble.example", { lookup: lookup([]) }), /no address/);
-  assert.equal(
-    await addressOf("mumble.example", { lookup: lookup(["10.0.0.1"]), anywhere: true }),
-    "10.0.0.1",
-    "when said so, for trying out",
-  );
-});
 
 test("the connection goes to that address, its name the server's for TLS", () => {
   assert.deepEqual(tlsOptions({ host: "mumble.example", address: "93.184.216.34", port: 1 }), {
@@ -71,7 +48,7 @@ function session(over = {}) {
   const statuses = [];
   const s = startSession(job(over), text => void statuses.push(text), {
     key: "k",
-    lookup: lookup(["93.184.216.34"]),
+    lookup: lookupOf(["93.184.216.34"]),
     connect: () => {
       const server = fake();
       servers.push(server);

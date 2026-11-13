@@ -1,7 +1,7 @@
 // The bot in Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's
 // page), and the bot sits in each, marked as recording, passing what is said to that match.
 import { originOf } from "../match.mjs";
-import { JobPoller } from "./jobs.mjs";
+import { JobPoller } from "./poller.mjs";
 import { startSession } from "./session.mjs";
 
 /**

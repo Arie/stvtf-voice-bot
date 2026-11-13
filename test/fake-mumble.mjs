@@ -1,4 +1,5 @@
 // A made-up Mumble server, for the tests.
+import assert from "node:assert/strict";
 import { PassThrough, Duplex } from "node:stream";
 import { decode, encode, frame, Frames } from "../src/mumble/proto.mjs";
 
@@ -47,3 +48,9 @@ export function welcomeIn(server) {
   welcome(server);
   server.send("UserState", { session: 2, actor: 2, channel_id: 5, recording: true });
 }
+
+/** A DNS lookup that answers `ips`. @param {string[]} ips @returns {import("../src/mumble/address.mjs").Lookup} */
+export const lookupOf = ips => async (host, o) => (
+  assert.equal(o.all, true),
+  ips.map(address => ({ address, family: address.includes(":") ? 6 : 4 }))
+);
