@@ -132,14 +132,14 @@ test("names are kept short, and a server of more people or channels than any has
   server.send("UserState", { session: 10, name: "x".repeat(10_000), channel_id: 5 });
   server.send("ChannelState", { channel_id: 6, name: "y".repeat(10_000) });
   await tick();
-  assert.equal(client.users.get(10)?.name.length, 128);
-  assert.equal(client.channels.get(6)?.length, 128);
+  assert.equal(client.server.users.get(10)?.name.length, 128);
+  assert.equal(client.server.channels.get(6)?.length, 128);
   for (let s = 100; s < 20_100 && !gone; s += 1000) {
     for (let i = s; i < s + 1000; i++) server.send("UserState", { session: i, name: "u" });
     await tick();
   }
   assert.equal(gone, "too many users");
-  assert.ok(client.users.size <= 5000);
+  assert.ok(client.server.users.size <= 5000);
 
   const other = fake();
   let left = "";

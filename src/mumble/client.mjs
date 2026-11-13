@@ -5,9 +5,11 @@
 import net from "node:net";
 import tls from "node:tls";
 import { decode, encode, frame, Frames } from "./proto.mjs";
+import { ServerState } from "./server-state.mjs";
+import { parseVoice } from "./voice.mjs";
 
 /** @typedef {import("./proto.mjs").Messages} Messages */
-import { parseVoice } from "./voice.mjs";
+/** @typedef {import("./server-state.mjs").Person} Person */
 
 // What the bot says it is: of before 1.5, so voice comes in the older packet form.
 const VERSION = (1 << 16) | (4 << 8);
@@ -16,12 +18,6 @@ const BOT = 1;
 // How often it pings (a server drops a client silent for 30 s), and how long signing in may take.
 const PING_MS = 15_000,
   JOIN_MS = 15_000;
-// What is kept of a server's people and channels: more than any real one has is a server to leave.
-const MAX_NAME = 128,
-  MAX_USERS = 5000,
-  MAX_CHANNELS = 5000;
-
-/** @typedef {{ session: number; name: string; channel: number; id: string }} Person */
 
 /**
  * Who someone on the server at `host` is to stv.tf: by their certificate, else as known there.
@@ -67,10 +63,7 @@ export class MumbleClient {
    */
   constructor(o) {
     this.o = o;
-    /** @type {Map<number, Person>} By session. */
-    this.users = new Map();
-    /** @type {Map<number, string>} Channels' names by id. */
-    this.channels = new Map();
+    this.server = new ServerState(why => this.#rejectJoin(why));
     this.session = -1;
     this.channel = -1;
     /** Whether the server has it in its channel: only then is voice taken. */
@@ -136,9 +129,9 @@ export class MumbleClient {
       case "Reject":
         return this.#reject(decode("Reject", body));
       case "ChannelState":
-        return this.#channelState(decode("ChannelState", body));
+        return this.server.applyChannelState(decode("ChannelState", body));
       case "ChannelRemove":
-        return this.#channelRemove(decode("ChannelRemove", body));
+        return this.server.applyChannelRemove(decode("ChannelRemove", body));
       case "UserState":
         return this.#userState(decode("UserState", body));
       case "UserRemove":
@@ -157,57 +150,39 @@ export class MumbleClient {
     this.#rejectJoin(m.reason ?? "refused", m.type);
   }
 
-  /** @param {import("./proto.mjs").ChannelRemove} m */
-  #channelRemove(m) {
-    if (m.channel_id != null) this.channels.delete(m.channel_id);
-  }
-
   /** @param {import("./proto.mjs").TextMessage} m */
   #textMessage(m) {
-    this.o.onText?.(m.actor == null ? undefined : this.users.get(m.actor), String(m.message ?? ""));
+    this.o.onText?.(m.actor == null ? undefined : this.server.users.get(m.actor), String(m.message ?? ""));
   }
 
   /** @param {Buffer} body */
   #voice(body) {
     const v = parseVoice(body);
-    const who = v && this.users.get(v.session);
+    const who = v && this.server.users.get(v.session);
     // Talk to the channel only, from someone in it; never a whisper.
     if (v && who && this.inChannel && v.target === 0 && who.channel === this.channel && v.session !== this.session)
       this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
   }
 
-  /** @param {import("./proto.mjs").ChannelState} m */
-  #channelState(m) {
-    if (m.name == null) return;
-    if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
-      return this.#rejectJoin("too many channels");
-    this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
-  }
-
   /** @param {import("./proto.mjs").UserState} m */
   #userState(m) {
-    if (m.session == null) return;
-    if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return this.#rejectJoin("too many users");
-    const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
-    if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
-    if (m.channel_id != null) u.channel = m.channel_id;
-    // Who they are from one visit to the next: their certificate, the same on any server;
-    // else as registered on this one.
-    if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
-    else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
-    this.users.set(m.session, u);
-    if (m.session !== this.session) return;
-    if (this.#onMovedIn && u.channel === this.channel) {
+    const u = this.server.applyUserState(m);
+    if (u && u.session === this.session) this.#ownChannelIs(u.channel);
+  }
+
+  /** Where the server has put the bot: in its channel at last, or moved out of it. @param {number} channel */
+  #ownChannelIs(channel) {
+    if (this.#onMovedIn && channel === this.channel) {
       this.inChannel = true;
       this.#onMovedIn();
       this.#onMovedIn = null;
-    } else if (this.inChannel && u.channel !== this.channel) this.#end("moved");
+    } else if (this.inChannel && channel !== this.channel) this.#end("moved");
   }
 
   /** @param {import("./proto.mjs").UserRemove} m */
   #userRemove(m) {
     if (m.session == null) return;
-    this.users.delete(m.session);
+    this.server.removeUser(m.session);
     if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
   }
 
@@ -220,13 +195,12 @@ export class MumbleClient {
   /** Signed in: to the channel. @param {import("./proto.mjs").ServerSync} m */
   #serverSync(m) {
     this.session = m.session ?? -1;
-    const want = this.o.channel.trim().toLowerCase();
-    const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
-    if (!found) return this.#rejectJoin(`no channel "${this.o.channel}"`);
-    this.channel = found[0];
+    const found = this.server.channelNamed(this.o.channel);
+    if (found === undefined) return this.#rejectJoin(`no channel "${this.o.channel}"`);
+    this.channel = found;
     // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
     // the server says it is there.
-    const there = this.users.get(this.session)?.channel === this.channel;
+    const there = this.server.users.get(this.session)?.channel === this.channel;
     this.#send("UserState", {
       session: this.session,
       channel_id: there ? undefined : this.channel,
@@ -240,7 +214,7 @@ export class MumbleClient {
 
   /** Those in the bot's channel, itself aside. @returns {Person[]} */
   people() {
-    return [...this.users.values()].filter(u => u.channel === this.channel && u.session !== this.session);
+    return this.server.peopleIn(this.channel, this.session);
   }
 
   /** Says `text` in the bot's channel. @param {string} text */
