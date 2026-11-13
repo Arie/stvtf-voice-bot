@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { DiscordSession } from "../src/discord/session.mjs";
-import { fetchOf, stand, tick } from "./stand.mjs";
+import { fetchOf, stand, tick, until } from "./stand.mjs";
 
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */
 function world() {
@@ -17,14 +17,19 @@ function world() {
   ]);
   const guild = { id: "g", name: "G", voiceAdapterCreator: {}, members: { cache: members, me: members.get("bot") } };
   const channel = { id: "42", name: "General", type: 2, guild, members };
+  /** @type {Map<string, EventEmitter>} Each speaker's Opus, as Discord sends it. */
+  const streams = new Map();
   const connection = Object.assign(new EventEmitter(), {
-    receiver: { speaking: new EventEmitter(), subscribe: () => new EventEmitter() },
+    receiver: {
+      speaking: new EventEmitter(),
+      subscribe: (/** @type {string} */ id) => streams.set(id, new EventEmitter()).get(id),
+    },
     destroyed: false,
     destroy() {
       this.destroyed = true;
     },
   });
-  /** @type {{ status?: string; channel?: string }[]} */
+  /** @type {{ status?: string; channel?: string; frames?: string[] }[]} */
   const told = [];
   const fetch = fetchOf(
     async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" }),
@@ -41,7 +46,7 @@ function world() {
     fetch,
     voice: { joinVoiceChannel: stand(() => connection), entersState: stand(async () => {}) },
   });
-  return { c, channel, members, member, connection, told, gone };
+  return { c, channel, members, member, connection, streams, told, gone };
 }
 
 test("a voice connection's error leaves that channel, and nothing else", async () => {
@@ -94,4 +99,15 @@ test("stv.tf is told who is here when that changes, not when anyone on the serve
   await tick();
   assert.equal(w.told.at(-1)?.status, "General · 2");
   w.c.leave("done");
+});
+
+test("leaving, it posts what was said up to then", async () => {
+  const w = world();
+  await w.c.join();
+  w.connection.receiver.speaking.emit("start", "1");
+  for (let i = 0; i < 2; i++) w.streams.get("1")?.emit("data", Buffer.from([i]));
+  await tick();
+  w.c.leave("done");
+  await until(() => w.told.some(t => t.frames));
+  assert.deepEqual(w.told.find(t => t.frames)?.frames?.length, 2);
 });

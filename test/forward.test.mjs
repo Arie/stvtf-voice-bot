@@ -92,6 +92,19 @@ test("a hiccup (the stream not there yet, the site restarting) is waited out, no
   assert.equal(posts.length, 2, "the next batch still goes");
 });
 
+test("stopped, what is batched still goes, and no more is taken", async () => {
+  const { posts, fetch } = fake();
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
+  for (let i = 0; i < 7; i++) f.add(speaker, Buffer.from([i]));
+  await f.stop();
+  f.add(speaker, Buffer.from([7]));
+  await f.flush();
+  assert.deepEqual(
+    posts.map(p => p.body.frames.length),
+    [5, 2],
+  );
+});
+
 test("the delay can change as it goes", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });

@@ -42,6 +42,15 @@ export class DiscordSession {
     this.gone = false;
   }
 
+  /** How far the match's stream is behind, in seconds: for what is said from now on. */
+  get delay() {
+    return this.forwarder.delay;
+  }
+
+  set delay(d) {
+    this.forwarder.delay = d;
+  }
+
   async join() {
     const { channel } = this;
     this.connection = this.voice.joinVoiceChannel({
@@ -141,7 +150,7 @@ export class DiscordSession {
     clearInterval(this.timer);
     clearInterval(this.reporting);
     postStatus(this.#statusTarget(), { kind: "discord", left: true, channel: this.channel.id });
-    this.forwarder.stopped = true;
+    this.forwarder.stop();
     try {
       this.connection?.destroy();
     } catch {}

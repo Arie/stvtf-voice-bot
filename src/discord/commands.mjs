@@ -72,8 +72,8 @@ export async function leaveCommand(i, session) {
 export async function delayCommand(i, session) {
   const here = await controlled(i, session);
   if (!here) return;
-  here.forwarder.delay = i.options.getNumber("delay", true);
-  const text = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
+  here.delay = i.options.getNumber("delay", true);
+  const text = `tv_delay: ${here.delay} s${here.delay ? "" : " (live)"}`;
   if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
     here.channel.send(noMentions(text)).catch(() => {});
   await i.reply(noMentions(text));

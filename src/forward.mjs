@@ -1,6 +1,6 @@
 // A channel's voice on its way to a match: each speaker's Opus frames batched five at a time
-// (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it;
-// anything else (no stream yet, the site restarting) is waited out.
+// (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it
+// (what waits is dropped); anything else (no stream yet, the site restarting) is waited out.
 
 // `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
 /** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
@@ -26,8 +26,10 @@ export class Forwarder {
     /** The match's invite, from the link. */
     this.invite = o.invite;
     this.fetch = o.fetch ?? fetch;
+    /** Told when it stops by itself: the match gone, the key or invite refused. */
     this.onStop = o.onStop ?? (() => {});
     this.onAnswer = o.onAnswer ?? (() => {});
+    /** Whether it takes no more frames. */
     this.stopped = false;
     /** Whether a post is on its way: what comes meanwhile waits, a speaker's as one post. */
     this.inFlight = false;
@@ -80,7 +82,7 @@ export class Forwarder {
   /** One post at a time until nothing waits. */
   async #drain() {
     try {
-      while (this.waiting.length && !this.stopped) await this.#post();
+      while (this.waiting.length) await this.#post();
     } finally {
       this.draining = false;
     }
@@ -88,7 +90,7 @@ export class Forwarder {
 
   async #post() {
     const b = this.waiting.shift();
-    if (!b || this.stopped) return;
+    if (!b) return;
     this.inFlight = true;
     try {
       await this.#answered(await this.fetch(this.url, this.#request(b)), b.frames.length);
@@ -121,15 +123,21 @@ export class Forwarder {
 
   /** What stv.tf answered a post of `frames`: gone, refused, or how it went. @param {Response} r @param {number} frames */
   async #answered(r, frames) {
-    if (r.status === 404) return this.#stop("match ended");
-    if (r.status === 401) return this.#stop("key refused");
-    if (r.status === 403) return this.#stop("invite expired");
+    if (r.status === 404) return this.#refused("match ended");
+    if (r.status === 401) return this.#refused("key refused");
+    if (r.status === 403) return this.#refused("invite expired");
     if (r.ok) this.sent += frames;
     this.onAnswer(`${r.status} ${await r.text()}`);
   }
 
-  /** @param {string} why */
-  #stop(why) {
+  /** Takes no more frames; what is batched still goes. Resolves once it is all posted. */
+  stop() {
+    this.stopped = true;
+    return this.flush();
+  }
+
+  /** Stopped by stv.tf: what waits is dropped. @param {string} why */
+  #refused(why) {
     this.stopped = true;
     this.waiting = [];
     this.batches.clear();

@@ -73,7 +73,7 @@ class MumbleSession {
     if (this.closing) return this.closing;
     this.gone = true;
     this.timers.forEach(clearInterval);
-    this.forwarder.flush();
+    this.forwarder.stop();
     this.closing = (async () => {
       if (this.client?.inChannel) {
         this.client.say(`Leaving: ${why}`);
@@ -154,6 +154,7 @@ class MumbleSession {
         if (this.gone || !c.inChannel) return;
         this.gone = true;
         this.timers.forEach(clearInterval);
+        this.forwarder.stop();
         this.onStatus(`Left: ${why}`, []);
       },
     });
