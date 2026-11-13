@@ -92,3 +92,17 @@ test("what it says in a channel mentions nobody, whatever names are in it", asyn
   for (const kind of ["follow", "channel"])
     assert.deepEqual(w.said.find(s => s[0] === kind)?.[1]?.allowedMentions, { parse: [] }, kind);
 });
+
+test("a join that fails says nothing of leaving a channel it was never in", async () => {
+  const w = world();
+  w.o.makeSession = c => ({
+    join: async () => Promise.reject(new Error("no")),
+    leave: why => c.onGone(why),
+    unlinked: async () => [],
+  });
+  await joinCommand(w.i, w.o);
+  assert.deepEqual(
+    w.said.map(s => s[0]),
+    ["edit"],
+  );
+});

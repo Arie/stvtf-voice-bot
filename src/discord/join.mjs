@@ -52,6 +52,8 @@ async function joinAndAnnounce(i, o, voice, match, delay) {
     key: o.key,
     who: o.whoFor(match.whoUrl),
     onGone: why => {
+      // Only one that was in says it left: one that would not join says so itself.
+      if (o.sessions.get(guild.id) !== session) return;
       o.sessions.delete(guild.id);
       guild.members.me?.setNickname(null).catch(() => {});
       if (voice.type === ChannelType.GuildVoice) voice.send(noMentions(`Left: ${why}`)).catch(() => {});
