@@ -4,11 +4,11 @@ import { Jobs, isPublic } from "../src/mumble/jobs.mjs";
 import { fetchOf } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/jobs.mjs").Job} Job */
-/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} Status */
-/** @typedef {{ job: Job; status: Status; delay: number; leave: (why: string) => Promise<void> | void }} Started */
+/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
+/** @typedef {{ job: Job; onStatus: OnStatus; delay: number; leave: (why: string) => Promise<void> | void }} Started */
 /**
  * @typedef {{
- *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, status: Status) => Started | null;
+ *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, onStatus: OnStatus) => Started | null;
  *   told: { url: string; status?: string; asked?: number; channel?: string; job?: number }[]; started: Started[]; left: [string, string, string][];
  * }} World
  */
@@ -38,11 +38,11 @@ function world() {
     }
     return { ok: true, status: 200, json: async () => ({ jobs: w.wanted, version: w.version }) };
   });
-  w.start = (j, status) => {
+  w.start = (j, onStatus) => {
     /** @type {Started} */
-    const s = { job: j, status, delay: j.delay, leave: why => void w.left.push([j.match, j.channel, why]) };
+    const s = { job: j, onStatus, delay: j.delay, leave: why => void w.left.push([j.match, j.channel, why]) };
     w.started.push(s);
-    status(`In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
+    onStatus(`In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
     return s;
   };
   return w;
@@ -107,9 +107,9 @@ test("stv.tf not answering sends nobody away", async () => {
 
 test("a server that cannot be joined is said so, and not tried over and over", async () => {
   const w = world();
-  w.start = (j, status) => {
-    w.started.push({ job: j, status, delay: j.delay, leave: () => {} });
-    status("Could not join: the server refused me: Wrong server password");
+  w.start = (j, onStatus) => {
+    w.started.push({ job: j, onStatus, delay: j.delay, leave: () => {} });
+    onStatus("Could not join: the server refused me: Wrong server password");
     return null;
   };
   const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
@@ -177,7 +177,7 @@ test("whatever stv.tf answers, it keeps asking", async () => {
     w.fetch = fetchOf(async () => ({ ok: true, status: 200, json: async () => answer }));
     // As the real one does with a job of no channel.
     /** @type {World["start"]} */
-    const start = (j, status) => (j.channel.replace(/x/, ""), w.start(j, status));
+    const start = (j, onStatus) => (j.channel.replace(/x/, ""), w.start(j, onStatus));
     const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
     await jobs.once();
   }
@@ -188,8 +188,8 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   /** @type {() => void} */
   let closed = () => {};
   const start = w.start;
-  w.start = (j, status) => {
-    const s = /** @type {Started} */ (start(j, status));
+  w.start = (j, onStatus) => {
+    const s = /** @type {Started} */ (start(j, onStatus));
     s.leave = why => {
       w.left.push([j.match, j.channel, why]);
       return new Promise(r => (closed = () => r()));

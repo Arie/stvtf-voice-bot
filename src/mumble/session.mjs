@@ -38,18 +38,18 @@ export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE
   return all[0].address;
 }
 
-/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} Status */
+/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
  * @typedef {{ key: string; name?: string; lookup?: Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch }} Options `lookup`, `connect` and `fetch` are for tests.
  */
 
 /**
- * @param {import("./jobs.mjs").Job} job @param {Status} status @param {Options} o
+ * @param {import("./jobs.mjs").Job} job @param {OnStatus} onStatus @param {Options} o
  * @returns {import("./jobs.mjs").Session}
  */
-export function startSession(job, status, o) {
-  return new MumbleSession(job, status, o);
+export function startSession(job, onStatus, o) {
+  return new MumbleSession(job, onStatus, o);
 }
 
 class MumbleSession {
@@ -66,10 +66,10 @@ class MumbleSession {
   /** @type {string | undefined} */
   address;
 
-  /** @param {import("./jobs.mjs").Job} job @param {Status} status @param {Options} o */
-  constructor(job, status, o) {
+  /** @param {import("./jobs.mjs").Job} job @param {OnStatus} onStatus @param {Options} o */
+  constructor(job, onStatus, o) {
     this.job = job;
-    this.status = status;
+    this.onStatus = onStatus;
     this.o = o;
     this.forwarder = new Forwarder({
       url: job.voice,
@@ -119,9 +119,9 @@ class MumbleSession {
   }
 
   /** How it goes, and who is in the channel: told to stv.tf. */
-  #report() {
+  #reportStatus() {
     const there = this.client?.people() ?? [];
-    this.status(
+    this.onStatus(
       `${this.job.channel} · ${there.length}`,
       there.map(p => ({ id: this.#idOf(p), name: p.name })),
     );
@@ -135,15 +135,15 @@ class MumbleSession {
       if (!client) return;
       if (this.gone) return void client.leave("disconnected");
       client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
-      this.#report();
+      this.#reportStatus();
       this.timers.push(
         setInterval(() => this.forwarder.flush(), FLUSH_MS),
-        setInterval(() => this.#report(), STATUS_MS),
+        setInterval(() => this.#reportStatus(), STATUS_MS),
       );
     } catch (e) {
       this.gone = true;
       // Told to leave, it has nothing more to say: another may be there by now.
-      if (!this.closing) this.status(`Could not join: ${/** @type {Error} */ (e).message}`, []);
+      if (!this.closing) this.onStatus(`Could not join: ${/** @type {Error} */ (e).message}`, []);
     }
   }
 
@@ -179,7 +179,7 @@ class MumbleSession {
         if (this.gone || !c.in) return;
         this.gone = true;
         this.timers.forEach(clearInterval);
-        this.status(`Left: ${why}`, []);
+        this.onStatus(`Left: ${why}`, []);
       },
     });
     return c;

@@ -12,7 +12,7 @@ import { startSession } from "./session.mjs";
  */
 export function startMumble({ hosts, key }) {
   const all = hosts.map(
-    host => new Jobs({ origin: homeOf([host]), key, start: (job, status) => startSession(job, status, { key }) }),
+    host => new Jobs({ origin: homeOf([host]), key, start: (job, onStatus) => startSession(job, onStatus, { key }) }),
   );
   for (const jobs of all) jobs.run();
   return { stop: why => Promise.all(all.map(jobs => jobs.stop(why))) };

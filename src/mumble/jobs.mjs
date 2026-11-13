@@ -3,7 +3,7 @@
 // answers the moment something changes, so a channel is joined as it is asked for; and tells it
 // how each goes (`POST <page>voice-status`), for the page to show.
 import net from "node:net";
-import { tell } from "../status.mjs";
+import { postStatus } from "../status.mjs";
 
 // How long stv.tf may keep a question open, and how long to wait after it did not answer.
 const ASK_MS = 40_000,
@@ -89,7 +89,7 @@ export class Jobs {
   /**
    * @param {{
    *   origin: string; key: string; fetch?: typeof fetch;
-   *   start: (job: Job, status: (text: string, people?: { id: string; name: string }[]) => void) => Session | null;
+   *   start: (job: Job, onStatus: (text: string, people?: { id: string; name: string }[]) => void) => Session | null;
    * }} o `start` joins a channel (or says why not, and gives none).
    */
   constructor(o) {
@@ -100,7 +100,7 @@ export class Jobs {
     /** @type {Map<string, Promise<void>>} By the same: the last session left, until it is closed. */
     this.closing = new Map();
     /** @type {Promise<unknown>[]} */
-    this.telling = [];
+    this.statusPosts = [];
     this.stopped = false;
     /** Whether stv.tf last refused the key. */
     this.refused = false;
@@ -123,7 +123,7 @@ export class Jobs {
         if (had.session) had.session.delay = job.delay;
       }
     }
-    await Promise.all(this.telling.splice(0));
+    await Promise.all(this.statusPosts.splice(0));
     return true;
   }
 
@@ -156,9 +156,9 @@ export class Jobs {
   /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
   #begin(job) {
     /** @type {(text: string, people?: { id: string; name: string }[]) => void} */
-    const status = (text, people) =>
-      void this.telling.push(
-        tell(
+    const onStatus = (text, people) =>
+      void this.statusPosts.push(
+        postStatus(
           { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
           { kind: "mumble", status: text, people, asked: job.asked, job: job.job, channel: channelOf(job) },
         ),
@@ -169,9 +169,9 @@ export class Jobs {
       if (entry.left) return;
       // One that would not be joined is not tried again until it is asked for anew.
       try {
-        entry.session = this.o.start(entry.job, status);
+        entry.session = this.o.start(entry.job, onStatus);
       } catch {
-        status("Could not join", []);
+        onStatus("Could not join", []);
       }
     };
     // The one before signs in by the same name: this one goes in once it is out.

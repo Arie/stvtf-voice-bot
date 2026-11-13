@@ -3,7 +3,7 @@
 // channel is empty of people, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "../forward.mjs";
-import { tell } from "../status.mjs";
+import { postStatus } from "../status.mjs";
 
 // How often what is batched is flushed, how long joining may take, and how often stv.tf is told
 // how it goes and who is here.
@@ -57,8 +57,8 @@ export class Channel {
     this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("disconnected"));
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
-    this.report();
-    this.reporting = setInterval(() => this.report(), STATUS_MS);
+    this.reportStatus();
+    this.reporting = setInterval(() => this.reportStatus(), STATUS_MS);
   }
 
   /** @param {string} id A Discord user id, the first time they talk. */
@@ -99,17 +99,17 @@ export class Channel {
   }
 
   /** Tells stv.tf how it goes here and who is in the channel, so they can be put on players. */
-  report() {
+  reportStatus() {
     if (this.gone) return;
     const people = [...this.channel.members.values()]
       .filter(m => !m.user.bot)
       .map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    tell(this.#to(), { kind: "discord", status, people, channel: this.channel.id });
+    postStatus(this.#statusTarget(), { kind: "discord", status, people, channel: this.channel.id });
   }
 
   /** Where stv.tf is told how it goes. */
-  #to() {
+  #statusTarget() {
     return { page: this.o.match.page, key: this.o.key, invite: this.o.match.invite, fetch: this.o.fetch };
   }
 
@@ -126,7 +126,7 @@ export class Channel {
       return;
     if (!this.hasPeople()) return this.leave("channel empty");
     // Someone came or went: stv.tf hears who is here now.
-    this.report();
+    this.reportStatus();
   }
 
   /** Whether anyone but bots is in the channel. */
@@ -140,7 +140,7 @@ export class Channel {
     this.gone = true;
     clearInterval(this.timer);
     clearInterval(this.reporting);
-    tell(this.#to(), { kind: "discord", left: true, channel: this.channel.id });
+    postStatus(this.#statusTarget(), { kind: "discord", left: true, channel: this.channel.id });
     this.forwarder.stopped = true;
     try {
       this.connection?.destroy();
