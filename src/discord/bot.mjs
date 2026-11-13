@@ -1,73 +1,48 @@
 // The bot in Discord: `/stv join` brings it into the caller's voice channel, where it says it is
 // recording and passes what is said to the match on stv.tf the link names, as the speakers'
 // players (their Steam accounts, linked through Discord on stv.tf). One channel per server.
-import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "discord.js";
+import { Client, GatewayIntentBits } from "discord.js";
 import { homeOf } from "../match.mjs";
+import { DEFAULT_DELAY, command, delayCommand, leaveCommand } from "./commands.mjs";
+import { joinCommand } from "./join.mjs";
+import { reply } from "./messages.mjs";
 import { DiscordSession } from "./session.mjs";
-import { mayControl } from "./control.mjs";
-import { joinCommand, noMentions, reply } from "./join.mjs";
 import { Who } from "./who.mjs";
 
 const NICK = "stv.tf ● recording";
-const DEFAULT_DELAY = 90,
-  MAX_DELAY = 300;
-
-const delayOption = (/** @type {import("discord.js").SlashCommandNumberOption} */ o) =>
-  o
-    .setName("delay")
-    .setDescription(`tv_delay in seconds (default ${DEFAULT_DELAY}; 0 = instant)`)
-    .setMinValue(0)
-    .setMaxValue(MAX_DELAY);
-
-const command = new SlashCommandBuilder()
-  .setName("stv")
-  .setDescription("Voice comms for stv.tf")
-  .addSubcommand(s =>
-    s
-      .setName("join")
-      .setDescription("Record your voice channel for a match")
-      .addStringOption(o =>
-        o.setName("link").setDescription("Link from stv.tf (Comms → Copy command)").setRequired(true),
-      )
-      .addNumberOption(delayOption),
-  )
-  .addSubcommand(s => s.setName("leave").setDescription("Leave the voice channel"))
-  .addSubcommand(s =>
-    s
-      .setName("delay")
-      .setDescription("Change tv_delay")
-      .addNumberOption(o => delayOption(o).setRequired(true)),
-  )
-  .addSubcommand(s => s.setName("link").setDescription("Link your Steam account"));
-
-const NOT_IN = "Join my voice channel first.";
 
 /**
- * Whether whoever gave the command is in the voice channel the bot is in.
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {DiscordSession} session
+ * Where to ask who someone is, by the URL to ask at: one Who for each stv.tf.
+ * @param {string} key @returns {(url: string) => Who}
  */
-async function inChannel(i, session) {
-  const member = await i.guild?.members.fetch(i.user.id);
-  return mayControl(member?.voice.channelId, session.channel.id);
+function whoCache(key) {
+  /** @type {Map<string, Who>} By stv.tf origin. */
+  const whos = new Map();
+  return url => {
+    const origin = new URL(url).origin;
+    let who = whos.get(origin);
+    if (!who) whos.set(origin, (who = new Who({ url, key })));
+    return who;
+  };
 }
 
 /**
- * `/stv leave` and `/stv delay`: for those in the bot's channel only.
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {DiscordSession | undefined} session
+ * A `/stv` command, whichever it is.
+ * @param {import("discord.js").ChatInputCommandInteraction} i
+ * @param {Parameters<typeof joinCommand>[1]} o @param {Map<string, DiscordSession>} sessions
  */
-async function control(i, session) {
-  if (!session) return reply(i, "Not in a channel.");
-  if (!(await inChannel(i, session))) return reply(i, NOT_IN);
-  if (i.options.getSubcommand() === "leave") {
-    session.leave(`/stv leave by ${i.user.displayName}`);
-    return reply(i, "Left.");
+async function onCommand(i, o, sessions) {
+  const session = i.guild ? sessions.get(i.guild.id) : undefined;
+  switch (i.options.getSubcommand()) {
+    case "join":
+      return joinCommand(i, o);
+    case "leave":
+      return leaveCommand(i, session);
+    case "delay":
+      return delayCommand(i, session);
+    case "link":
+      return reply(i, `Link Steam: ${homeOf(o.hosts)}/voice/link`);
   }
-  session.forwarder.delay = i.options.getNumber("delay", true);
-  const text = `tv_delay: ${session.forwarder.delay} s${session.forwarder.delay ? "" : " (live)"}`;
-  // Told where it is recorded, wherever the command was given.
-  if (session.channel.type === ChannelType.GuildVoice && i.channelId !== session.channel.id)
-    session.channel.send(noMentions(text)).catch(() => {});
-  return i.reply(noMentions(text));
 }
 
 /**
@@ -79,10 +54,18 @@ async function control(i, session) {
 export function startDiscord({ hosts, key, token }) {
   /** @type {Map<string, DiscordSession>} The bot in a channel, by server. */
   const sessions = new Map();
-  /** @type {Set<string>} Servers the bot is on its way into a channel of. */
-  const joining = new Set();
-  /** @type {Map<string, Who>} By stv.tf origin. */
-  const whos = new Map();
+  /** @type {Parameters<typeof joinCommand>[1]} */
+  const joinOptions = {
+    hosts,
+    key,
+    nick: NICK,
+    defaultDelay: DEFAULT_DELAY,
+    sessions,
+    // Servers the bot is on its way into a channel of.
+    joining: new Set(),
+    whoFor: whoCache(key),
+    makeSession: o => new DiscordSession(o),
+  };
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 
@@ -96,42 +79,9 @@ export function startDiscord({ hosts, key, token }) {
     console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${hosts.join(", ")}`);
   });
 
-  /** @param {string} url Where to ask who someone is: one Who for each stv.tf. */
-  const whoFor = url => {
-    const origin = new URL(url).origin;
-    let who = whos.get(origin);
-    if (!who) whos.set(origin, (who = new Who({ url, key })));
-    return who;
-  };
-
-  /** @type {Parameters<typeof joinCommand>[1]} */
-  const joinOptions = {
-    hosts,
-    key,
-    nick: NICK,
-    defaultDelay: DEFAULT_DELAY,
-    sessions,
-    joining,
-    whoFor,
-    makeSession: o => new DiscordSession(o),
-  };
-
   client.on("interactionCreate", async i => {
     if (!i.isChatInputCommand() || i.commandName !== "stv") return;
-    const session = i.guild ? sessions.get(i.guild.id) : undefined;
-    try {
-      switch (i.options.getSubcommand()) {
-        case "join":
-          return await joinCommand(i, joinOptions);
-        case "leave":
-        case "delay":
-          return await control(i, session);
-        case "link":
-          return await reply(i, `Link Steam: ${homeOf(hosts)}/voice/link`);
-      }
-    } catch (e) {
-      console.error("stvtf-voice-bot:", e);
-    }
+    await onCommand(i, joinOptions, sessions).catch(e => console.error("stvtf-voice-bot:", e));
   });
 
   // Someone came or went, or the bot was moved.
