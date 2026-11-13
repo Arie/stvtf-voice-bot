@@ -1,6 +1,7 @@
 // A channel's voice on its way to a match: each speaker's Opus frames batched five at a time
 // (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it
 // (what waits is dropped); anything else (no stream yet, the site restarting) is waited out.
+import { discard } from "./http.mjs";
 
 // `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
 /** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
@@ -123,9 +124,11 @@ export class Forwarder {
 
   /** What stv.tf answered a post of `frames`: gone, refused, or how it went. @param {Response} r @param {number} frames */
   async #answered(r, frames) {
-    if (r.status === 404) return this.#refused("match ended");
-    if (r.status === 401) return this.#refused("key refused");
-    if (r.status === 403) return this.#refused("invite expired");
+    const refused = { 404: "match ended", 401: "key refused", 403: "invite expired" }[r.status];
+    if (refused) {
+      await discard(r);
+      return this.#refused(refused);
+    }
     if (r.ok) this.sent += frames;
     this.onAnswer(`${r.status} ${await r.text()}`);
   }

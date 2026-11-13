@@ -2,6 +2,7 @@
 // has a say in its voice. The bot keeps a question open with stv.tf (`GET /voice/mumble`), which
 // answers the moment something changes, so a channel is joined as it is asked for; and tells it
 // how each goes (`POST <page>voice-status`), for the page to show.
+import { discard } from "../http.mjs";
 import { postStatus } from "../status.mjs";
 import { channelOf, isJob } from "./job.mjs";
 
@@ -77,7 +78,10 @@ export class JobPoller {
         redirect: "error",
       });
       this.refused = r.status === 401;
-      if (!r.ok) return null;
+      if (!r.ok) {
+        await discard(r);
+        return null;
+      }
       wanted = await r.json();
     } catch {
       // Not answering is not being told to leave.

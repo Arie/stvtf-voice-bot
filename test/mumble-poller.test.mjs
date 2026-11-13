@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JobPoller } from "../src/mumble/poller.mjs";
-import { fetchOf, tick } from "./stand.mjs";
+import { fetchOf, tick, unread } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/job.mjs").Job} Job */
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
@@ -219,4 +219,17 @@ test("two channels wanted for one match are each sat in, and each left by itself
     ["Red"],
   );
   assert.equal(w.started.length, 2, "the one that stays is not joined anew");
+});
+
+test("an answer that is no answer is let go of unread", async () => {
+  const w = world();
+  const body = unread();
+  const poller = new JobPoller({
+    origin: "https://stv.tf",
+    key: "k",
+    fetch: fetchOf(async () => ({ ok: false, status: 502, body })),
+    start: w.start,
+  });
+  assert.equal(await poller.poll(), false);
+  assert.equal(body.cancelled, true);
 });

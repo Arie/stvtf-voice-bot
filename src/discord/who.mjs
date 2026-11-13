@@ -1,6 +1,8 @@
 // Who a Discord user is on Steam, as stv.tf knows from their link (GET /voice/who): kept once
 // known, asked again in a while for those not linked (they may link meanwhile).
 
+import { discard } from "../http.mjs";
+
 const ASK_AGAIN_MS = 60_000,
   ASK_MS = 3000;
 
@@ -36,7 +38,7 @@ export class Who {
         signal: AbortSignal.timeout(ASK_MS),
         redirect: "error",
       });
-      const body = r.ok ? /** @type {{ steamid?: unknown } | null} */ (await r.json()) : null;
+      const body = r.ok ? /** @type {{ steamid?: unknown } | null} */ (await r.json()) : (await discard(r), null);
       if (typeof body?.steamid === "string") steamid = body.steamid;
     } catch {}
     this.known.set(discord, { steamid, at: this.o.now() });

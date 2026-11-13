@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Forwarder } from "../src/forward.mjs";
-import { fetchOf, tick } from "./stand.mjs";
+import { fetchOf, tick, unread } from "./stand.mjs";
 
 /** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number }} Body */
 
@@ -190,4 +190,17 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   }
   await f.flush();
   assert.equal(posts, 101);
+});
+
+test("an answer that stops it is let go of unread", async () => {
+  const body = unread();
+  const f = new Forwarder({
+    url: "u",
+    key: "k",
+    delay: 90,
+    fetch: fetchOf(async () => ({ status: 404, ok: false, body })),
+  });
+  f.add(speaker, Buffer.from([1]));
+  await f.flush();
+  assert.equal(body.cancelled, true);
 });

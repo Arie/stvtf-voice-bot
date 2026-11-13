@@ -19,3 +19,9 @@ export async function until(f, turns = 1000) {
   }
   throw new Error(`not after ${turns} turns: ${f}`);
 }
+
+/** A body nobody reads, that says whether it was let go of. */
+export function unread() {
+  const body = { cancelled: false, cancel: async () => void (body.cancelled = true) };
+  return body;
+}

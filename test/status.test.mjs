@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { postStatus } from "../src/status.mjs";
-import { fetchOf } from "./stand.mjs";
+import { fetchOf, unread } from "./stand.mjs";
 
 test("stv.tf is told how it goes in a channel, and who is in it, with the key and the invite", async () => {
   /** @type {{ url: string; auth: string; body: unknown }[]} */
@@ -34,4 +34,16 @@ test("stv.tf is told how it goes in a channel, and who is in it, with the key an
     { page: "p/", key: "k", invite: "i", fetch: fetchOf(async () => Promise.reject(new Error("down"))) },
     { kind: "discord", status: "x" },
   );
+});
+
+test("what stv.tf answers is let go of unread", async () => {
+  const body = unread();
+  await postStatus(
+    { page: "p/", key: "k", invite: "i", fetch: fetchOf(async () => ({ ok: true, status: 204, body })) },
+    {
+      kind: "discord",
+      status: "x",
+    },
+  );
+  assert.equal(body.cancelled, true);
 });

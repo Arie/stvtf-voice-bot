@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Who } from "../src/discord/who.mjs";
-import { fetchOf } from "./stand.mjs";
+import { fetchOf, unread } from "./stand.mjs";
 
 test("a linked Discord user is their SteamID, asked once", async () => {
   let asked = 0;
@@ -51,4 +51,11 @@ test("asked about by many frames at once, the site is asked once", async () => {
   answer({ status: 200, ok: true, json: async () => ({ steamid: "[U:1:9]" }) });
   assert.deepEqual(await Promise.all(all), ["[U:1:9]", "[U:1:9]", "[U:1:9]"]);
   assert.equal(asked, 1);
+});
+
+test("an answer of no link is let go of unread", async () => {
+  const body = unread();
+  const who = new Who({ url: "u", key: "k", fetch: fetchOf(async () => ({ status: 404, ok: false, body })) });
+  assert.equal(await who.lookup("7"), null);
+  assert.equal(body.cancelled, true);
 });
