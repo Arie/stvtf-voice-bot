@@ -14,7 +14,7 @@ const BATCH = 5,
 
 export class Forwarder {
   /**
-   * @param {{ url: string; key: string; delay: number; channel?: string; invite?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onSaid?: (said: string) => void }} o
+   * @param {{ url: string; key: string; delay: number; channel?: string; invite?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onAnswer?: (answer: string) => void }} o
    */
   constructor(o) {
     this.url = o.url;
@@ -27,7 +27,7 @@ export class Forwarder {
     this.invite = o.invite;
     this.fetch = o.fetch ?? fetch;
     this.onStop = o.onStop ?? (() => {});
-    this.onSaid = o.onSaid ?? (() => {});
+    this.onAnswer = o.onAnswer ?? (() => {});
     this.stopped = false;
     /** Whether a post is on its way: what comes meanwhile waits, a speaker's as one post. */
     this.inFlight = false;
@@ -111,9 +111,9 @@ export class Forwarder {
       if (r.status === 401) return this.#stop("key refused");
       if (r.status === 403) return this.#stop("invite expired");
       if (r.ok) this.sent += b.frames.length;
-      this.onSaid(`${r.status} ${await r.text()}`);
+      this.onAnswer(`${r.status} ${await r.text()}`);
     } catch (e) {
-      this.onSaid(`post failed: ${/** @type {Error} */ (e).message}`);
+      this.onAnswer(`post failed: ${/** @type {Error} */ (e).message}`);
     } finally {
       this.inFlight = false;
     }

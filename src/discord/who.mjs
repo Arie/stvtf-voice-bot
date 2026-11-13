@@ -36,8 +36,8 @@ export class Who {
         signal: AbortSignal.timeout(ASK_MS),
         redirect: "error",
       });
-      const said = r.ok ? /** @type {{ steamid?: unknown } | null} */ (await r.json()) : null;
-      if (typeof said?.steamid === "string") steamid = said.steamid;
+      const body = r.ok ? /** @type {{ steamid?: unknown } | null} */ (await r.json()) : null;
+      if (typeof body?.steamid === "string") steamid = body.steamid;
     } catch {}
     this.known.set(discord, { steamid, at: this.o.now() });
     return steamid;

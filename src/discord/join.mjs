@@ -12,7 +12,7 @@ import { matchOf } from "../match.mjs";
 export const reply = (i, content) => i.reply({ content, flags: MessageFlags.Ephemeral });
 
 /** What the bot says where others see it: names in it (any can be `@everyone`) mention nobody. @param {string} content */
-export const said = content => ({ content, allowedMentions: { parse: /** @type {[]} */ ([]) } });
+export const noMentions = content => ({ content, allowedMentions: { parse: /** @type {[]} */ ([]) } });
 
 /**
  * @param {import("discord.js").ChatInputCommandInteraction} i
@@ -59,7 +59,7 @@ async function joinIn(i, o, voice, match, delay) {
     onGone: why => {
       o.channels.delete(guild.id);
       guild.members.me?.setNickname(null).catch(() => {});
-      if (voice.type === ChannelType.GuildVoice) voice.send(said(`Left: ${why}`)).catch(() => {});
+      if (voice.type === ChannelType.GuildVoice) voice.send(noMentions(`Left: ${why}`)).catch(() => {});
     },
   });
   try {
@@ -72,8 +72,8 @@ async function joinIn(i, o, voice, match, delay) {
   guild.members.me?.setNickname(o.nick).catch(() => {});
   // Said at once, as it is recording already; who has no link (a question per person) after.
   await i.editReply(
-    said(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`),
+    noMentions(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`),
   );
   const unlinked = await channel.unlinked();
-  if (unlinked.length) await i.followUp(said(`Not linked: ${unlinked.join(", ")} (\`/stv link\`)`));
+  if (unlinked.length) await i.followUp(noMentions(`Not linked: ${unlinked.join(", ")} (\`/stv link\`)`));
 }

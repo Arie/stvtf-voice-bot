@@ -5,7 +5,7 @@ import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "dis
 import { homeOf } from "../match.mjs";
 import { Channel } from "./channel.mjs";
 import { mayControl } from "./control.mjs";
-import { join as joinChannel, reply, said as quiet } from "./join.mjs";
+import { join as joinChannel, noMentions, reply } from "./join.mjs";
 import { Who } from "./who.mjs";
 
 const NICK = "stv.tf ● recording";
@@ -63,11 +63,11 @@ async function control(i, here) {
     return reply(i, "Left.");
   }
   here.forwarder.delay = i.options.getNumber("delay", true);
-  const said = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
+  const text = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
   // Told where it is recorded, wherever the command was given.
   if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
-    here.channel.send(quiet(said)).catch(() => {});
-  return i.reply(quiet(said));
+    here.channel.send(noMentions(text)).catch(() => {});
+  return i.reply(noMentions(text));
 }
 
 /**

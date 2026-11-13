@@ -30,7 +30,7 @@ export class Channel {
       invite: o.match.invite ?? undefined,
       fetch: o.fetch,
       onStop: why => this.leave(why),
-      onSaid: said => this.#log(said),
+      onAnswer: answer => this.#log(answer),
     });
     this.voice = o.voice ?? { joinVoiceChannel, entersState };
     /** What stv.tf last answered, its numbers aside: logged when it changes. */
@@ -82,12 +82,12 @@ export class Channel {
     this.frames.set(id, then);
   }
 
-  /** @param {string} said What stv.tf answered a post, or why it failed. */
-  #log(said) {
-    const kind = said.replace(/\d+$/, "");
+  /** @param {string} answer What stv.tf answered a post, or why it failed. */
+  #log(answer) {
+    const kind = answer.replace(/\d+$/, "");
     if (kind === this.answered) return;
     this.answered = kind;
-    console.log(`stvtf-voice-bot: ${this.channel.guild.name} → ${this.o.match.page}: ${said}`);
+    console.log(`stvtf-voice-bot: ${this.channel.guild.name} → ${this.o.match.page}: ${answer}`);
   }
 
   /** Those in the channel now who have no Steam link, by display name. */
