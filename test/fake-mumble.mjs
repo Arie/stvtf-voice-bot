@@ -2,6 +2,9 @@
 import assert from "node:assert/strict";
 import { PassThrough, Duplex } from "node:stream";
 import { decode, encode, frame, Frames } from "../src/mumble/proto.mjs";
+import { stand } from "./stand.mjs";
+
+/** @typedef {import("../src/mumble/proto.mjs").Messages} Messages */
 
 /** A made-up server: what the client sent it, and a way to send the client messages. */
 export function fake() {
@@ -22,8 +25,11 @@ export function fake() {
       return server.socket;
     },
     /** @param {keyof typeof import("../src/mumble/proto.mjs").TYPES} type @param {Buffer | Record<string, unknown>} message */
-    send: (type, message) => toClient.write(frame(type, Buffer.isBuffer(message) ? message : encode(type, message))),
-    /** @param {string} type */
+    send: (type, message) =>
+      toClient.write(
+        frame(type, Buffer.isBuffer(message) ? message : encode(/** @type {keyof Messages} */ (type), stand(message))),
+      ),
+    /** @template {keyof Messages} T @param {T} type @returns {Messages[T][]} */
     sent: type => got.filter(m => m.type === type).map(m => decode(type, m.body)),
     end: () => toClient.end(),
   };

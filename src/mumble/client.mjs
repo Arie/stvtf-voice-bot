@@ -5,6 +5,8 @@
 import net from "node:net";
 import tls from "node:tls";
 import { decode, encode, frame, Frames } from "./proto.mjs";
+
+/** @typedef {import("./proto.mjs").Messages} Messages */
 import { parseVoice } from "./voice.mjs";
 
 // What the bot says it is: of before 1.5, so voice comes in the older packet form.
@@ -121,33 +123,48 @@ export class MumbleClient {
     });
   }
 
-  /** @param {keyof typeof import("./proto.mjs").TYPES} type @param {Record<string, unknown>} message */
+  /** @template {keyof Messages} T @param {T} type @param {Messages[T]} message */
   #send(type, message) {
     if (!this.gone) this.socket?.write(frame(type, encode(type, message)));
   }
 
   /** @param {string} type @param {Buffer} body */
   #onMessage(type, body) {
-    if (type === "UDPTunnel") return this.#voice(body);
-    const m = decode(type, body);
     switch (type) {
+      case "UDPTunnel":
+        return this.#voice(body);
       case "Reject":
-        return this.#rejectJoin(m.reason ?? "refused", m.type);
+        return this.#reject(decode("Reject", body));
       case "ChannelState":
-        return this.#channelState(m);
+        return this.#channelState(decode("ChannelState", body));
       case "ChannelRemove":
-        return void this.channels.delete(m.channel_id);
+        return this.#channelRemove(decode("ChannelRemove", body));
       case "UserState":
-        return this.#userState(m);
+        return this.#userState(decode("UserState", body));
       case "UserRemove":
-        return this.#userRemove(m);
+        return this.#userRemove(decode("UserRemove", body));
       case "ServerSync":
-        return this.#serverSync(m);
+        return this.#serverSync(decode("ServerSync", body));
       case "PermissionDenied":
-        return this.#permissionDenied(m);
+        return this.#permissionDenied(decode("PermissionDenied", body));
       case "TextMessage":
-        return this.o.onText?.(this.users.get(m.actor), String(m.message ?? ""));
+        return this.#textMessage(decode("TextMessage", body));
     }
+  }
+
+  /** @param {import("./proto.mjs").Reject} m */
+  #reject(m) {
+    this.#rejectJoin(m.reason ?? "refused", m.type);
+  }
+
+  /** @param {import("./proto.mjs").ChannelRemove} m */
+  #channelRemove(m) {
+    if (m.channel_id != null) this.channels.delete(m.channel_id);
+  }
+
+  /** @param {import("./proto.mjs").TextMessage} m */
+  #textMessage(m) {
+    this.o.onText?.(m.actor == null ? undefined : this.users.get(m.actor), String(m.message ?? ""));
   }
 
   /** @param {Buffer} body */
@@ -159,7 +176,7 @@ export class MumbleClient {
       this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
   }
 
-  /** @param {Record<string, any>} m */
+  /** @param {import("./proto.mjs").ChannelState} m */
   #channelState(m) {
     if (m.name == null) return;
     if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
@@ -167,8 +184,9 @@ export class MumbleClient {
     this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
   }
 
-  /** @param {Record<string, any>} m */
+  /** @param {import("./proto.mjs").UserState} m */
   #userState(m) {
+    if (m.session == null) return;
     if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return this.#rejectJoin("too many users");
     const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
     if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
@@ -186,21 +204,22 @@ export class MumbleClient {
     } else if (this.inChannel && u.channel !== this.channel) this.#end("moved");
   }
 
-  /** @param {Record<string, any>} m */
+  /** @param {import("./proto.mjs").UserRemove} m */
   #userRemove(m) {
+    if (m.session == null) return;
     this.users.delete(m.session);
     if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
   }
 
-  /** Refused something: the move to its channel, or something said. @param {Record<string, any>} m */
+  /** Refused something: the move to its channel, or something said. @param {import("./proto.mjs").PermissionDenied} m */
   #permissionDenied(m) {
     if (this.#onMovedIn) return this.#rejectJoin("move refused");
     this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
   }
 
-  /** Signed in: to the channel. @param {Record<string, any>} m */
+  /** Signed in: to the channel. @param {import("./proto.mjs").ServerSync} m */
   #serverSync(m) {
-    this.session = m.session;
+    this.session = m.session ?? -1;
     const want = this.o.channel.trim().toLowerCase();
     const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
     if (!found) return this.#rejectJoin(`no channel "${this.o.channel}"`);

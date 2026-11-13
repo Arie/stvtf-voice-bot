@@ -53,6 +53,29 @@ const FIELDS = {
   PermissionDenied: { 4: ["reason", "string"], 5: ["type", "uint"] },
 };
 
+/**
+ * The messages FIELDS has, as decode() gives them: a field not sent is not there.
+ * @typedef {{ version_v1?: number; release?: string; os?: string; os_version?: string }} Version
+ * @typedef {{ username?: string; password?: string; opus?: boolean; client_type?: number }} Authenticate
+ * @typedef {{ timestamp?: number }} Ping
+ * @typedef {{ type?: number; reason?: string }} Reject
+ * @typedef {{ session?: number; welcome_text?: string }} ServerSync
+ * @typedef {{ channel_id?: number }} ChannelRemove
+ * @typedef {{ channel_id?: number; parent?: number; name?: string }} ChannelState
+ * @typedef {{ session?: number; reason?: string }} UserRemove
+ * @typedef {{
+ *   session?: number; name?: string; user_id?: number; channel_id?: number; self_mute?: boolean;
+ *   self_deaf?: boolean; comment?: string; hash?: string; recording?: boolean;
+ * }} UserState
+ * @typedef {{ actor?: number; channel_id?: number[]; message?: string }} TextMessage
+ * @typedef {{ reason?: string; type?: number }} PermissionDenied
+ * @typedef {{
+ *   Version: Version; Authenticate: Authenticate; Ping: Ping; Reject: Reject; ServerSync: ServerSync;
+ *   ChannelRemove: ChannelRemove; ChannelState: ChannelState; UserRemove: UserRemove; UserState: UserState;
+ *   TextMessage: TextMessage; PermissionDenied: PermissionDenied;
+ * }} Messages
+ */
+
 /** @param {number} n A whole number, 0 and up. */
 function writeVarint(n) {
   const out = [];
@@ -78,11 +101,12 @@ function readVarint(b, at) {
   throw new Error("a number too long");
 }
 
-/** @param {string} type @param {Record<string, unknown>} message */
+/** @template {keyof Messages} T @param {T} type @param {Messages[T]} message */
 export function encode(type, message) {
   const parts = [];
+  const fields = /** @type {Record<string, unknown>} */ (message);
   for (const [number, [name, kind]] of Object.entries(FIELDS[type])) {
-    const value = message[name];
+    const value = fields[name];
     if (value == null) continue;
     for (const v of kind.endsWith("[]") ? /** @type {unknown[]} */ (value) : [value]) {
       if (kind.startsWith("string")) {
@@ -94,9 +118,9 @@ export function encode(type, message) {
   return Buffer.concat(parts);
 }
 
-/** @param {string} type @param {Buffer} body @returns {Record<string, any>} The fields FIELDS names. */
+/** @template {keyof Messages} T @param {T} type @param {Buffer} body @returns {Messages[T]} */
 export function decode(type, body) {
-  /** @type {Record<string, any>} */
+  /** @type {Record<string, unknown>} */
   const out = {};
   const fields = FIELDS[type] ?? {};
   for (let at = 0; at < body.length;) {
@@ -106,10 +130,10 @@ export function decode(type, body) {
     const [name, kind] = fields[tag >> 3] ?? [];
     const value = name ? fieldValue(kind, raw) : undefined;
     if (value === undefined) continue;
-    if (kind.endsWith("[]")) (out[name] ??= []).push(value);
+    if (kind.endsWith("[]")) /** @type {unknown[]} */ (out[name] ??= []).push(value);
     else out[name] = value;
   }
-  return out;
+  return /** @type {Messages[T]} */ (out);
 }
 
 /**
