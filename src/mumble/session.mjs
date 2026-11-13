@@ -191,7 +191,7 @@ class MumbleSession {
     if (this.gone) return;
     let packer = this.packers.get(v.session);
     if (!packer) this.packers.set(v.session, (packer = new Twenties()));
-    const who = { steamid: null, discord: this.#idOf(v), name: v.name };
+    const who = { steamid: null, id: this.#idOf(v), name: v.name };
     for (const opus of [...packer.push(v.opus), ...(v.last ? packer.flush() : [])]) this.forwarder.frame(who, opus);
   }
 }

@@ -77,7 +77,7 @@ export class Channel {
     const then = before.then(async () => {
       const steamid = this.o.who.peek(id) ?? (await this.o.who.steamid(id));
       const member = this.channel.guild.members.cache.get(id);
-      this.forwarder.frame({ steamid, discord: id, name: member?.displayName ?? "someone" }, opus);
+      this.forwarder.frame({ steamid, id, name: member?.displayName ?? "someone" }, opus);
     });
     this.frames.set(id, then);
   }

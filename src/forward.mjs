@@ -2,7 +2,8 @@
 // (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it;
 // anything else (no stream yet, the site restarting) is waited out.
 
-/** @typedef {{ steamid: string | null; discord: string; name: string }} Speaker */
+// `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
+/** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
 
 // Frames in a post as they come, and at most when posts are slow (what waits of a speaker goes
 // as one); the most posts waiting before the oldest go; and how long a post may take.
@@ -44,11 +45,11 @@ export class Forwarder {
   /** @param {Speaker} speaker @param {Buffer} opus */
   frame(speaker, opus) {
     if (this.stopped) return;
-    let b = this.batches.get(speaker.discord);
-    if (!b) this.batches.set(speaker.discord, (b = { speaker, frames: [] }));
+    let b = this.batches.get(speaker.id);
+    if (!b) this.batches.set(speaker.id, (b = { speaker, frames: [] }));
     b.speaker = speaker;
     b.frames.push(opus.toString("base64"));
-    if (b.frames.length >= BATCH) this.#queue(speaker.discord);
+    if (b.frames.length >= BATCH) this.#queue(speaker.id);
   }
 
   /** What is batched goes now (a timer calls this every 100 ms); resolves once it is all posted. */
@@ -64,7 +65,7 @@ export class Forwarder {
     if (!b?.frames.length) return;
     // Behind a slow post, onto what already waits of this speaker (the last of all, so in order).
     const last = this.waiting.at(-1);
-    if (this.inFlight && last && last.speaker.discord === id && last.frames.length + b.frames.length <= MAX_POST) {
+    if (this.inFlight && last && last.speaker.id === id && last.frames.length + b.frames.length <= MAX_POST) {
       last.frames.push(...b.frames);
       return;
     }
@@ -88,7 +89,7 @@ export class Forwarder {
   async #post() {
     const b = this.waiting.shift();
     if (!b || this.stopped) return;
-    const { steamid, discord, name } = b.speaker;
+    const { steamid, id, name } = b.speaker;
     this.inFlight = true;
     try {
       const r = await this.fetch(this.url, {
@@ -99,7 +100,7 @@ export class Forwarder {
         body: JSON.stringify({
           invite: this.invite,
           steamid,
-          discord,
+          discord: id,
           name,
           channel: this.channel,
           frames: b.frames,
