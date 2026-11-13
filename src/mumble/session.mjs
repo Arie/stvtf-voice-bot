@@ -2,6 +2,7 @@
 // 20 ms and passed to stv.tf, each known by who they are on that server (registered, or their
 // certificate), so the match's page can put them on a player and keep them there.
 import { Forwarder } from "../forward.mjs";
+import { logOf } from "../log.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
 import { addressOf } from "./address.mjs";
 import { channelOf, nameOf } from "./job.mjs";
@@ -16,7 +17,8 @@ const IN_USE = 5,
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
  * @typedef {{ key: string; anywhere?: boolean; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
- *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void> }} Options `lookup`, `connect`, `fetch` and `pause` are for tests.
+ *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void>; print?: (line: string) => void }} Options
+ *   `lookup`, `connect`, `fetch`, `pause` and `print` are for tests.
  */
 
 /**
@@ -44,8 +46,16 @@ class MumbleSession {
   /** @param {import("./job.mjs").Job} job @param {OnStatus} onStatus @param {Options} o */
   constructor(job, onStatus, o) {
     this.job = job;
-    this.onStatus = onStatus;
     this.o = o;
+    // How it goes, and what stv.tf answers its posts: each logged when it changes.
+    const where = `${channelOf(job)} → ${job.page}`;
+    this.logStatus = logOf(where, o.print);
+    /** @type {OnStatus} */
+    this.onStatus = (text, people) => {
+      this.logStatus(text);
+      onStatus(text, people);
+    };
+    this.logAnswer = logOf(where, o.print);
     this.forwarder = new Forwarder({
       url: job.voice,
       key: o.key,
@@ -54,6 +64,7 @@ class MumbleSession {
       fetch: o.fetch,
       channel: channelOf(job),
       onStop: why => this.leave(why),
+      onAnswer: answer => this.logAnswer(answer),
     });
     this.started = this.#start();
   }
@@ -71,6 +82,7 @@ class MumbleSession {
   /** @param {string} why @returns {Promise<void>} Once its connection is closed. */
   leave(why) {
     if (this.closing) return this.closing;
+    this.logStatus(`Leaving: ${why}`);
     this.gone = true;
     this.timers.forEach(clearInterval);
     this.forwarder.stop();

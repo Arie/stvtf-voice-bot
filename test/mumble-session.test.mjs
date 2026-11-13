@@ -49,10 +49,13 @@ function session(over = {}, options = {}) {
   const posts = [];
   /** @type {string[]} */
   const statuses = [];
+  /** @type {string[]} */
+  const logged = [];
   const s = startSession(job(over), text => void statuses.push(text), {
     key: "k",
     lookup: lookupOf(["93.184.216.34"]),
     pause: async () => {},
+    print: line => void logged.push(line),
     connect: () => {
       const server = fake();
       servers.push(server);
@@ -63,7 +66,7 @@ function session(over = {}, options = {}) {
     ),
     ...options,
   });
-  return { s, servers, posts, statuses, server: () => /** @type {Server} */ (servers.at(-1)) };
+  return { s, servers, posts, statuses, logged, server: () => /** @type {Server} */ (servers.at(-1)) };
 }
 /** @param {Server} server @param {number} n */
 const talk = (server, n) => {
@@ -163,4 +166,17 @@ test("a server on this network is joined only when the bot is told it may be", a
   const lan = session({}, { lookup: lookupOf(["10.0.0.1"]), anywhere: true });
   await until(() => lan.servers.length);
   await lan.s.leave("done");
+});
+
+test("how it goes is logged when it changes, and the key never", async () => {
+  const w = await joined();
+  await w.s.leave("done");
+  assert.deepEqual(
+    w.logged.map(l => l.replace(/^.*→ \S+: /, "")),
+    ["Team Comms · 1", "Leaving: done"],
+  );
+  assert.ok(
+    w.logged.every(l => l.startsWith("stvtf-voice-bot: mumble:mumble.example:Team_Comms → https://stv.tf/w/m1/")),
+  );
+  assert.ok(!w.logged.join("\n").includes("Bearer"));
 });

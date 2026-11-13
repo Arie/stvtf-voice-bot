@@ -4,6 +4,7 @@
 // how each goes (`POST <page>voice-status`), for the page to show.
 import { setTimeout as sleep } from "node:timers/promises";
 import { discard } from "../http.mjs";
+import { logOf } from "../log.mjs";
 import { postStatus } from "../status.mjs";
 import { channelOf, isJob } from "./job.mjs";
 
@@ -30,12 +31,14 @@ const connectionKeyOf = j => [j.host, j.port, j.password, j.channel, j.invite, j
 export class JobPoller {
   /**
    * @param {{
-   *   origin: string; key: string; fetch?: typeof fetch;
+   *   origin: string; key: string; fetch?: typeof fetch; print?: (line: string) => void;
    *   start: (job: Job, onStatus: (text: string, people?: { id: string; name: string }[]) => void) => Session | null;
    * }} o `start` joins a channel (or says why not, and gives none).
    */
   constructor(o) {
     this.o = { fetch, ...o };
+    /** How stv.tf answers: logged when it changes. */
+    this.log = logOf(`${o.origin}/voice/mumble`, o.print);
     this.version = 0;
     /** @type {Map<string, Entry>} By match and which of its channels (`keyOf`). */
     this.sessions = new Map();
@@ -83,14 +86,17 @@ export class JobPoller {
       });
       this.refused = r.status === 401;
       if (!r.ok) {
+        this.log(this.refused ? "key refused" : `${r.status} answered`);
         await discard(r);
         return null;
       }
       wanted = await r.json();
-    } catch {
+    } catch (e) {
       // Not answering is not being told to leave.
+      if (!this.stopped) this.log(`no answer (${/** @type {Error} */ (e).message})`);
       return null;
     }
+    this.log("answering");
     const { jobs = [], version } = /** @type {{ jobs?: unknown; version?: unknown }} */ (wanted ?? {});
     if (wanted === null || typeof wanted !== "object" || !Array.isArray(jobs)) return null;
     this.version = Number(version) || 0;

@@ -10,6 +10,7 @@ import { fetchOf, tick, unread, until } from "./stand.mjs";
  * @typedef {{
  *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, onStatus: OnStatus) => Started | null;
  *   told: { url: string; status?: string; asked?: number; channel?: string; job?: number }[]; started: Started[]; left: [string, string, string][];
+ *   logged: string[]; print: (line: string) => void;
  * }} World
  */
 
@@ -28,7 +29,19 @@ const job = (over = {}) => ({
 /** A made-up stv.tf (what it wants, what it was told) and made-up Mumble sessions. */
 function world() {
   /** @type {World} */
-  const w = { wanted: [job()], version: 1, told: [], started: [], left: [], down: false, fetch, start: () => null };
+  const w = {
+    wanted: [job()],
+    version: 1,
+    told: [],
+    started: [],
+    left: [],
+    down: false,
+    fetch,
+    start: () => null,
+    logged: [],
+    print: () => {},
+  };
+  w.print = line => void w.logged.push(line);
   w.fetch = fetchOf(async (url, init) => {
     if (w.down) throw new Error("down");
     if (init.method === "POST") {
@@ -49,7 +62,7 @@ function world() {
 
 test("a channel wanted is joined, with where its voice goes, and the page is told how it goes", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   assert.equal(w.started.length, 1);
   assert.deepEqual(
@@ -73,7 +86,7 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
 
 test("one no longer wanted is left; one wanted elsewhere is left and joined anew; a new delay is taken", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   w.wanted = [job({ delay: 0 })];
   await poller.poll();
@@ -97,7 +110,7 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
 
 test("stv.tf not answering sends nobody away", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   w.down = true;
   await poller.poll();
@@ -111,7 +124,7 @@ test("a server that cannot be joined is said so, and not tried over and over", a
     onStatus("Could not join: the server refused me: Wrong server password");
     return null;
   };
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   await poller.poll();
   assert.equal(w.started.length, 1);
@@ -120,7 +133,7 @@ test("a server that cannot be joined is said so, and not tried over and over", a
 
 test("the same channel asked for anew is left and joined again", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   w.wanted = [job({ asked: 1 })];
   await poller.poll();
   w.wanted = [job({ asked: 2 })];
@@ -140,7 +153,7 @@ test("whatever stv.tf answers, it keeps asking", async () => {
     // As the real one does with a job of no channel.
     /** @type {World["start"]} */
     const start = (j, onStatus) => (j.channel.replace(/x/, ""), w.start(j, onStatus));
-    const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
+    const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start, print: w.print });
     await poller.poll();
   }
 });
@@ -158,7 +171,7 @@ test("a channel joined anew waits for the old connection to close (both sign in 
     };
     return s;
   };
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   w.wanted = [job({ channel: "Team B" })];
   await poller.poll();
@@ -179,27 +192,33 @@ test("a channel joined anew waits for the old connection to close (both sign in 
 test("what the page is told says which ask, and which channel, it is of", async () => {
   const w = world();
   w.wanted = [job({ asked: 3, channel: "Team A/1" })];
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   await poller.poll();
   assert.deepEqual([w.told[0].asked, w.told[0].channel], [3, "mumble:mumble.example:Team_A_1"]);
 });
 
 test("a stv.tf that refuses the key is asked again much later than one that is down", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   w.down = true;
   await poller.poll();
   const down = poller.retryIn();
   w.down = false;
   w.fetch = fetchOf(async () => ({ ok: false, status: 401 }));
-  const refused = new JobPoller({ origin: "https://stv.tf", key: "wrong", fetch: w.fetch, start: w.start });
+  const refused = new JobPoller({
+    origin: "https://stv.tf",
+    key: "wrong",
+    fetch: w.fetch,
+    start: w.start,
+    print: w.print,
+  });
   await refused.poll();
   assert.ok(refused.retryIn() >= 20 * down, `${refused.retryIn()} against ${down}`);
 });
 
 test("two channels wanted for one match are each sat in, and each left by itself", async () => {
   const w = world();
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   w.wanted = [job({ job: 1, channel: "Red" }), job({ job: 2, channel: "Blu" })];
   await poller.poll();
   assert.deepEqual(
@@ -229,6 +248,7 @@ test("an answer that is no answer is let go of unread", async () => {
     key: "k",
     fetch: fetchOf(async () => ({ ok: false, status: 502, body })),
     start: w.start,
+    print: w.print,
   });
   assert.equal(await poller.poll(), false);
   assert.equal(body.cancelled, true);
@@ -241,7 +261,7 @@ test("stopped, the question open with stv.tf is let go, and what it answers star
   /** @type {(r: unknown) => void} */
   let answer = () => {};
   const fetch = fetchOf((url, init) => ((signal = init.signal), new Promise(r => (answer = r))));
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch, start: w.start, print: w.print });
   const polled = poller.poll();
   await tick();
   await poller.stop("restarting");
@@ -254,11 +274,33 @@ test("stopped, the question open with stv.tf is let go, and what it answers star
 test("stopped while waiting to ask again, it stops at once", async () => {
   const w = world();
   w.down = true;
-  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
   let ended = false;
   const running = poller.run().then(() => (ended = true));
   await tick();
   await poller.stop("restarting");
   await until(() => ended);
   await running;
+});
+
+test("how stv.tf answers is logged when it changes, and the key never", async () => {
+  const w = world();
+  const poller = new JobPoller({
+    origin: "https://stv.tf",
+    key: "SECRET",
+    fetch: w.fetch,
+    start: w.start,
+    print: w.print,
+  });
+  w.down = true;
+  await poller.poll();
+  await poller.poll();
+  w.down = false;
+  await poller.poll();
+  await poller.poll();
+  assert.deepEqual(w.logged, [
+    "stvtf-voice-bot: https://stv.tf/voice/mumble: no answer (down)",
+    "stvtf-voice-bot: https://stv.tf/voice/mumble: answering",
+  ]);
+  assert.ok(!w.logged.join("\n").includes("SECRET"));
 });

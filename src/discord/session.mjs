@@ -3,6 +3,7 @@
 // channel is empty of people, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "../forward.mjs";
+import { logOf } from "../log.mjs";
 import { postStatus } from "../status.mjs";
 
 // How often what is batched is flushed, how long joining may take, and how often stv.tf is told
@@ -30,11 +31,11 @@ export class DiscordSession {
       invite: o.match.invite ?? undefined,
       fetch: o.fetch,
       onStop: why => this.leave(why),
-      onAnswer: answer => this.#log(answer),
+      onAnswer: answer => this.log(answer),
     });
     this.voice = o.voice ?? { joinVoiceChannel, entersState };
-    /** What stv.tf last answered, its numbers aside: logged when it changes. */
-    this.answered = "";
+    /** What stv.tf answers its posts, or why they failed: logged when it changes. */
+    this.log = logOf(`${o.channel.guild.name} → ${o.match.page}`);
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
     /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
@@ -89,14 +90,6 @@ export class DiscordSession {
       this.forwarder.add({ steamid, id, name: member?.displayName ?? "someone" }, opus);
     });
     this.frames.set(id, then);
-  }
-
-  /** @param {string} answer What stv.tf answered a post, or why it failed. */
-  #log(answer) {
-    const kind = answer.replace(/\d+$/, "");
-    if (kind === this.answered) return;
-    this.answered = kind;
-    console.log(`stvtf-voice-bot: ${this.channel.guild.name} → ${this.o.match.page}: ${answer}`);
   }
 
   /** Those in the channel now who have no Steam link, by display name. */
