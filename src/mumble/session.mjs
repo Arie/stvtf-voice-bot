@@ -13,7 +13,7 @@ const FLUSH_MS = 100,
 /**
  * The name the bot signs in by for a job: its match's and channel's own. A server lets a second
  * of one name in by putting the first out, so two channels, or two matches on one server, must
- * not share one; and a name takes no space on most servers.
+ * not share one. A name costs a server nothing: it need not be registered.
  * @param {import("./jobs.mjs").Job} job
  */
 export const nameOf = job => `stv.tf-${job.match.slice(0, 6)}${(job.job ?? 1) > 1 ? `-${job.job}` : ""}`;
