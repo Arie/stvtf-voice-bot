@@ -5,7 +5,7 @@ import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "dis
 import { homeOf } from "../match.mjs";
 import { Channel } from "./channel.mjs";
 import { mayControl } from "./control.mjs";
-import { join as joinChannel, noMentions, reply } from "./join.mjs";
+import { joinCommand, noMentions, reply } from "./join.mjs";
 import { Who } from "./who.mjs";
 
 const NICK = "stv.tf ● recording";
@@ -104,18 +104,17 @@ export function startDiscord({ hosts, key, token }) {
     return who;
   };
 
-  /** @param {import("discord.js").ChatInputCommandInteraction} i */
-  const join = i =>
-    joinChannel(i, {
-      hosts,
-      key,
-      nick: NICK,
-      defaultDelay: DEFAULT_DELAY,
-      channels,
-      joining,
-      whoFor,
-      makeChannel: o => new Channel(o),
-    });
+  /** @type {Parameters<typeof joinCommand>[1]} */
+  const joinOptions = {
+    hosts,
+    key,
+    nick: NICK,
+    defaultDelay: DEFAULT_DELAY,
+    channels,
+    joining,
+    whoFor,
+    makeChannel: o => new Channel(o),
+  };
 
   client.on("interactionCreate", async i => {
     if (!i.isChatInputCommand() || i.commandName !== "stv") return;
@@ -123,7 +122,7 @@ export function startDiscord({ hosts, key, token }) {
     try {
       switch (i.options.getSubcommand()) {
         case "join":
-          return await join(i);
+          return await joinCommand(i, joinOptions);
         case "leave":
         case "delay":
           return await control(i, here);

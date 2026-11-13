@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { join } from "../src/discord/join.mjs";
+import { joinCommand } from "../src/discord/join.mjs";
 import { stand } from "./stand.mjs";
 
 /** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
-/** @typedef {Parameters<typeof join>[1]} Options */
+/** @typedef {Parameters<typeof joinCommand>[1]} Options */
 /** @typedef {import("../src/discord/join.mjs").Joined & { o: Parameters<Options["makeChannel"]>[0] }} Made */
 
 /**
@@ -57,7 +57,7 @@ test("it says it is recording before it knows who is not linked, then says that"
   /** @type {(v: string[]) => void} */
   let known = () => {};
   const w = world({ unlinked: () => new Promise(r => (known = r)) });
-  const joined = join(w.i, w.o);
+  const joined = joinCommand(w.i, w.o);
   await new Promise(r => setImmediate(r));
   assert.match(w.said.find(s => s[0] === "edit")?.[1]?.content ?? "", /Recording/);
   known(["arie"]);
@@ -71,7 +71,7 @@ test("however a join ends, the server can be joined again", async () => {
     { unlinked: async () => Promise.reject(new Error("down")) },
   ]) {
     const w = world(over);
-    await join(w.i, w.o).catch(() => {});
+    await joinCommand(w.i, w.o).catch(() => {});
     assert.equal(w.o.joining.size, 0);
   }
   const w = world();
@@ -80,13 +80,13 @@ test("however a join ends, the server can be joined again", async () => {
     leave: () => {},
     unlinked: async () => [],
   });
-  await join(w.i, w.o);
+  await joinCommand(w.i, w.o);
   assert.equal(w.o.joining.size, 0);
 });
 
 test("what it says in a channel mentions nobody, whatever names are in it", async () => {
   const w = world({ unlinked: async () => ["@everyone"] });
-  await join(w.i, w.o);
+  await joinCommand(w.i, w.o);
   w.made().o.onGone("/stv leave by @everyone");
   await new Promise(r => setImmediate(r));
   for (const kind of ["follow", "channel"])

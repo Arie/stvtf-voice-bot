@@ -23,7 +23,7 @@ export const noMentions = content => ({ content, allowedMentions: { parse: /** @
  *   makeChannel: (o: ConstructorParameters<typeof import("./channel.mjs").Channel>[0]) => Joined;
  * }} o `channels`: the one the bot is in, by server; `joining`: servers it is on its way into.
  */
-export async function join(i, o) {
+export async function joinCommand(i, o) {
   const { channels, joining } = o;
   const member = await i.guild?.members.fetch(i.user.id);
   const voice = member?.voice.channel;
@@ -37,17 +37,17 @@ export async function join(i, o) {
   // Held from here on, until it is in or not: a second join meanwhile is told so.
   joining.add(guildId);
   try {
-    await joinIn(i, o, voice, match, delay);
+    await joinAndAnnounce(i, o, voice, match, delay);
   } finally {
     joining.delete(guildId);
   }
 }
 
 /**
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {Parameters<typeof join>[1]} o
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {Parameters<typeof joinCommand>[1]} o
  * @param {import("discord.js").VoiceBasedChannel} voice @param {NonNullable<ReturnType<typeof matchOf>>} match @param {number} delay
  */
-async function joinIn(i, o, voice, match, delay) {
+async function joinAndAnnounce(i, o, voice, match, delay) {
   const guild = /** @type {import("discord.js").Guild} */ (i.guild);
   await i.deferReply();
   const channel = o.makeChannel({
