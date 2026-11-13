@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decode, encode, frame, Frames, TYPES } from "../src/mumble/proto.mjs";
-import { opusDuration, parseVoice, varint } from "../src/mumble/voice.mjs";
+import { opusDuration, parseVoice, readMumbleVarint } from "../src/mumble/voice.mjs";
 
 test("messages are written and read back as Mumble has them", () => {
   const auth = encode("Authenticate", { username: "stv.tf", password: "pw", opus: true, client_type: 1 });
@@ -40,11 +40,12 @@ test("the connection is cut into messages: a type, a length, the rest, however i
 });
 
 test("numbers in voice packets are Mumble's own, of one to nine bytes", () => {
-  assert.deepEqual(varint(Buffer.from([0x7f]), 0), [0x7f, 1]);
-  assert.deepEqual(varint(Buffer.from([0x81, 0x02]), 0), [0x102, 2]);
-  assert.deepEqual(varint(Buffer.from([0xc1, 0x02, 0x03]), 0), [0x10203, 3]);
-  assert.deepEqual(varint(Buffer.from([0xe1, 0x02, 0x03, 0x04]), 0), [0x1020304, 4]);
-  assert.deepEqual(varint(Buffer.from([0xf0, 0x01, 0x02, 0x03, 0x04]), 0), [0x1020304, 5]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([0x7f]), 0), [0x7f, 1]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([0x81, 0x02]), 0), [0x102, 2]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([0xc1, 0x02, 0x03]), 0), [0x10203, 3]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([0xe1, 0x02, 0x03, 0x04]), 0), [0x1020304, 4]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([0xf0, 0x01, 0x02, 0x03, 0x04]), 0), [0x1020304, 5]);
+  assert.deepEqual(readMumbleVarint(Buffer.from([9, 0x81, 0x02]), 1), [0x102, 3], "where it ends");
 });
 
 test("a voice packet says who talks, and holds one Opus packet and whether the utterance ends", () => {

@@ -19,9 +19,9 @@ const KINDS = [
 
 /**
  * One of Mumble's own variable-length numbers (not protobuf's), of those that are not negative.
- * @param {Buffer} b @param {number} at @returns {[number, number] | null} It, and how long it is.
+ * @param {Buffer} b @param {number} at @returns {[number, number] | null} It, and where it ends.
  */
-export function varint(b, at) {
+export function readMumbleVarint(b, at) {
   const first = b[at];
   if (first === undefined) return null;
   const kind = KINDS.find(([below]) => first < below);
@@ -30,7 +30,7 @@ export function varint(b, at) {
   if (at + more >= b.length + (more ? 0 : 1)) return null;
   let v = first & mask;
   for (let i = 1; i <= more; i++) v = v * 256 + b[at + i];
-  return [v, more + 1];
+  return [v, at + more + 1];
 }
 
 /**
@@ -44,10 +44,10 @@ export function parseVoice(packet) {
   let at = 1;
   const numbers = [];
   for (let i = 0; i < 3; i++) {
-    const n = varint(packet, at);
+    const n = readMumbleVarint(packet, at);
     if (!n) return null;
     numbers.push(n[0]);
-    at += n[1];
+    at = n[1];
   }
   const [session, sequence, size] = numbers;
   const length = size & (LAST - 1);
