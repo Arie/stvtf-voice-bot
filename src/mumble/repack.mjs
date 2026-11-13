@@ -30,11 +30,11 @@ export function framesOf(p) {
       ? []
       : [p.subarray(first[1], first[1] + first[0]), p.subarray(first[1] + first[0])];
   }
-  return manyOf(p);
+  return framesOfCode3(p);
 }
 
 /** The frames of a packet of any number of them (code 3). @param {Buffer} p @returns {Buffer[]} */
-function manyOf(p) {
+function framesOfCode3(p) {
   if (p.length < 2) return [];
   const [vbr, padded, count] = [(p[1] & 0x80) !== 0, (p[1] & 0x40) !== 0, p[1] & 0x3f];
   const pad = padded ? paddingOf(p) : { at: 2, pad: 0 };
@@ -74,14 +74,14 @@ function paddingOf(p) {
 }
 
 /** Frames of one kind as one packet. @param {number} kind The kind's byte, less its two last bits. @param {Buffer[]} frames */
-function packet(kind, frames) {
+function packFrames(kind, frames) {
   if (frames.length === 1) return Buffer.concat([Buffer.from([kind]), frames[0]]);
   const lengths = frames.slice(0, -1).flatMap(f => writeLength(f.length));
   return Buffer.concat([Buffer.from([kind | 3, 0x80 | frames.length, ...lengths]), ...frames]);
 }
 
 /** One speaker's packets, of whatever length, as packets of 20 ms. */
-export class Twenties {
+export class Repacker20ms {
   kind = 0;
   /** @type {Buffer[]} Frames waiting for more to make 20 ms. */
   waiting = [];
@@ -103,7 +103,7 @@ export class Twenties {
   /** What waits, short of 20 ms as it may be: at the end of an utterance. @returns {Buffer[]} */
   flush() {
     if (!this.waiting.length) return [];
-    const out = packet(this.kind, this.waiting);
+    const out = packFrames(this.kind, this.waiting);
     this.waiting = [];
     return [out];
   }

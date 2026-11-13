@@ -104,7 +104,7 @@ export function decode(type, body) {
     [tag, at] = readVarint(body, at);
     [raw, at] = readValue(body, at, tag & 7);
     const [name, kind] = fields[tag >> 3] ?? [];
-    const value = name ? typed(kind, raw) : undefined;
+    const value = name ? fieldValue(kind, raw) : undefined;
     if (value === undefined) continue;
     if (kind.endsWith("[]")) (out[name] ??= []).push(value);
     else out[name] = value;
@@ -137,7 +137,7 @@ function readValue(body, at, wire) {
 }
 
 /** A value as its field has it; none if it is not of that kind. @param {string} kind @param {number | Buffer | undefined} v */
-function typed(kind, v) {
+function fieldValue(kind, v) {
   if (kind.startsWith("string")) return Buffer.isBuffer(v) ? v.toString() : undefined;
   if (typeof v !== "number") return undefined;
   return kind === "bool" ? v !== 0 : v;

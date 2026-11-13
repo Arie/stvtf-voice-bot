@@ -5,7 +5,7 @@ import dns from "node:dns/promises";
 import { Forwarder } from "../forward.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
 import { channelOf, isPublic } from "./jobs.mjs";
-import { Twenties } from "./repack.mjs";
+import { Repacker20ms } from "./repack.mjs";
 
 // How often what waits is sent, and how often the page is told who is in the channel.
 const FLUSH_MS = 100,
@@ -61,7 +61,7 @@ class MumbleSession {
   gone = false;
   /** @type {Promise<void> | null} Once told to leave: resolves when the connection is closed. */
   closing = null;
-  /** @type {Map<number, Twenties>} By the speaker's session on the server. */
+  /** @type {Map<number, Repacker20ms>} By the speaker's session on the server. */
   packers = new Map();
   /** @type {string | undefined} */
   address;
@@ -190,7 +190,7 @@ class MumbleSession {
     // What comes once told to leave is not passed on.
     if (this.gone) return;
     let packer = this.packers.get(v.session);
-    if (!packer) this.packers.set(v.session, (packer = new Twenties()));
+    if (!packer) this.packers.set(v.session, (packer = new Repacker20ms()));
     const who = { steamid: null, id: this.#idOf(v), name: v.name };
     for (const opus of [...packer.push(v.opus), ...(v.last ? packer.flush() : [])]) this.forwarder.frame(who, opus);
   }
