@@ -42,6 +42,12 @@ export const tlsOptions = o => ({
   key: o.key,
 });
 
+/** Calls `f` every `ms`, keeping the process going no longer: returns how to stop. @param {() => void} f @param {number} ms */
+function repeatUnref(f, ms) {
+  const timer = setInterval(f, ms).unref();
+  return () => clearInterval(timer);
+}
+
 export class MumbleClient {
   /** @type {(() => void) | null} Set while it waits for the server to move it to its channel. */
   #onMovedIn = null;
@@ -78,42 +84,47 @@ export class MumbleClient {
    * refusal, the Reject's type as `reject`).
    */
   join() {
-    const o = this.o;
-    const connect = o.connect ?? (() => tls.connect(tlsOptions(o)));
-    // Neither timer keeps the process going by itself.
-    const every =
-      o.every ??
-      ((f, ms) =>
-        (
-          t => () =>
-            clearInterval(t)
-        )(setInterval(f, ms).unref()));
     return new Promise((resolve, reject) => {
-      /** @type {(why: string, type?: number) => void} */
-      const fail = (why, type) => {
+      // Neither timer keeps the process going by itself.
+      const timer = setTimeout(() => this.#rejectJoin("timed out"), JOIN_MS).unref();
+      this.#resolveJoin = () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      };
+      // Once in, there is nothing to reject: what comes after only ends the connection.
+      this.#rejectJoin = (why, type) => {
+        clearTimeout(timer);
         reject(Object.assign(new Error(why), { reject: type }));
         this.#end(why);
       };
-      const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
-      const done = () => clearTimeout(timer);
-      this.#resolveJoin = () => (done(), resolve(undefined));
-      this.#rejectJoin = (why, type) => (done(), fail(why, type));
-      this.socket = connect();
-      const frames = new Frames();
-      this.socket.on("data", chunk => {
-        try {
-          for (const m of frames.push(chunk)) this.#onMessage(m.type, m.body);
-        } catch (e) {
-          done();
-          fail("bad reply");
-        }
-      });
-      this.socket.on("error", e => (done(), fail(`connection failed (${e.message})`)));
-      this.socket.on("close", () => (done(), fail("connection closed"), this.#markClosed()));
-      this.#send("Version", { version_v1: VERSION, release: "stv.tf voice bot", os: "bot" });
-      this.#send("Authenticate", { username: o.username, password: o.password, opus: true, client_type: BOT });
-      this.stopPings = every(() => this.#send("Ping", { timestamp: Date.now() }), PING_MS);
+      this.#connect();
+      this.#signIn();
     });
+  }
+
+  /** Opens the connection, and reads the server's messages off it. */
+  #connect() {
+    const socket = (this.socket = (this.o.connect ?? (() => tls.connect(tlsOptions(this.o))))());
+    const frames = new Frames();
+    socket.on("data", chunk => {
+      try {
+        for (const m of frames.push(chunk)) this.#onMessage(m.type, m.body);
+      } catch {
+        this.#rejectJoin("bad reply");
+      }
+    });
+    socket.on("error", e => this.#rejectJoin(`connection failed (${e.message})`));
+    socket.on("close", () => {
+      this.#rejectJoin("connection closed");
+      this.#markClosed();
+    });
+  }
+
+  /** Says who it is, and pings from then on. */
+  #signIn() {
+    this.#send("Version", { version_v1: VERSION, release: "stv.tf voice bot", os: "bot" });
+    this.#send("Authenticate", { username: this.o.username, password: this.o.password, opus: true, client_type: BOT });
+    this.stopPings = (this.o.every ?? repeatUnref)(() => this.#send("Ping", { timestamp: Date.now() }), PING_MS);
   }
 
   /** @template {keyof Messages} T @param {T} type @param {Messages[T]} message */
