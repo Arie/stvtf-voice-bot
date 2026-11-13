@@ -111,3 +111,21 @@ test("leaving, it posts what was said up to then", async () => {
   await until(() => w.told.some(t => t.frames));
   assert.deepEqual(w.told.find(t => t.frames)?.frames?.length, 2);
 });
+
+test("a connection lost a moment is waited for; one that does not come back is left", async () => {
+  /** @type {string[]} */
+  const waited = [];
+  for (const back of [true, false]) {
+    const w = world();
+    w.c.voice.entersState = stand(async (/** @type {unknown} */ c, /** @type {string} */ state) => {
+      waited.push(state);
+      if (state !== "ready" && !back) throw new Error("timed out");
+    });
+    await w.c.join();
+    w.connection.emit("disconnected");
+    await tick();
+    assert.deepEqual(w.gone, back ? [] : ["disconnected"], `back: ${back}`);
+    w.c.leave("done");
+  }
+  assert.deepEqual(waited.slice(0, 3), ["ready", "signalling", "connecting"]);
+});

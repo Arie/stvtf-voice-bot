@@ -6,11 +6,12 @@ import { Forwarder } from "../forward.mjs";
 import { logOf } from "../log.mjs";
 import { postStatus } from "../status.mjs";
 
-// How often what is batched is flushed, how long joining may take, and how often stv.tf is told
-// how it goes and who is here.
+// How often what is batched is flushed, how long joining may take, how often stv.tf is told how
+// it goes and who is here, and how long a lost connection has to come back by itself.
 const FLUSH_MS = 100,
   JOIN_MS = 30_000,
-  STATUS_MS = 10_000;
+  STATUS_MS = 10_000,
+  RECONNECT_MS = 5000;
 
 export class DiscordSession {
   /**
@@ -64,11 +65,24 @@ export class DiscordSession {
     // Unheard, it would end the process: it only ends this channel.
     this.connection.on("error", () => this.leave("voice error"));
     await this.voice.entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
-    this.connection.on(VoiceConnectionStatus.Disconnected, () => this.leave("disconnected"));
+    this.connection.on(VoiceConnectionStatus.Disconnected, () => this.#disconnected());
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
     this.reportStatus();
     this.reporting = setInterval(() => this.reportStatus(), STATUS_MS);
+  }
+
+  /** Lost a moment (a network hiccup, a voice server moved) it reconnects by itself; else it is gone. */
+  async #disconnected() {
+    const connection = /** @type {import("@discordjs/voice").VoiceConnection} */ (this.connection);
+    try {
+      await Promise.race([
+        this.voice.entersState(connection, VoiceConnectionStatus.Signalling, RECONNECT_MS),
+        this.voice.entersState(connection, VoiceConnectionStatus.Connecting, RECONNECT_MS),
+      ]);
+    } catch {
+      this.leave("disconnected");
+    }
   }
 
   /** @param {string} id A Discord user id, the first time they talk. */
