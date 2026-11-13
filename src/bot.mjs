@@ -4,6 +4,10 @@
 import { config } from "./config.mjs";
 import { startDiscord } from "./discord/bot.mjs";
 import { startMumble } from "./mumble/bot.mjs";
+import { stopOnSignal } from "./shutdown.mjs";
+
+// How long the goodbyes in Discord and Mumble may take, all at once, before it exits.
+const GOODBYE_MS = 5000;
 
 let settings;
 try {
@@ -14,13 +18,15 @@ try {
 }
 const { hosts, key, token, anywhere } = settings;
 
-const discord = startDiscord({ hosts, key, token });
+const discord = startDiscord({
+  hosts,
+  key,
+  token,
+  onLoginFailed: e => {
+    console.error(`stvtf-voice-bot: Discord: ${e.message}`);
+    process.exit(1);
+  },
+});
 const mumble = startMumble({ hosts, key, anywhere });
 
-for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, async () => {
-    // Mumble's goodbyes get a moment to go out.
-    await Promise.race([mumble.stop("restarting"), new Promise(r => setTimeout(r, 2000))]);
-    await discord.stop("restarting");
-    process.exit(0);
-  });
+stopOnSignal({ stop: () => Promise.all([mumble.stop("restarting"), discord.stop("restarting")]), ms: GOODBYE_MS });

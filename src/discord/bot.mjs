@@ -45,13 +45,17 @@ async function onCommand(i, o, sessions) {
   }
 }
 
+const newClient = () => new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+
 /**
  * Signs in to Discord with `token` and takes `/stv` commands, for matches on `hosts` (voice goes
- * there with `key`). Its `stop` leaves every channel, once each has said so, and signs out.
- * @param {{ hosts: string[]; key: string; token: string }} o
+ * there with `key`); `onLoginFailed` is told if Discord will not have the token. Its `stop` leaves
+ * every channel, once each has said so, and signs out.
+ * @param {{ hosts: string[]; key: string; token: string; onLoginFailed: (e: Error) => void; client?: Client }} o
+ *   `client` is for tests.
  * @returns {{ stop: (why: string) => Promise<void> }}
  */
-export function startDiscord({ hosts, key, token }) {
+export function startDiscord({ hosts, key, token, onLoginFailed, client = newClient() }) {
   /** @type {Map<string, DiscordSession>} The bot in a channel, by server. */
   const sessions = new Map();
   /** @type {Parameters<typeof joinCommand>[1]} */
@@ -66,8 +70,6 @@ export function startDiscord({ hosts, key, token }) {
     whoFor: whoCache(key),
     makeSession: o => new DiscordSession(o),
   };
-
-  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 
   // Unheard, an error would end the process; the client reconnects by itself.
   client.on("error", e => console.error("stvtf-voice-bot:", e));
@@ -87,7 +89,7 @@ export function startDiscord({ hosts, key, token }) {
   // Someone came or went, or the bot was moved.
   client.on("voiceStateUpdate", (old, now) => sessions.get(old.guild.id)?.update(old, now));
 
-  client.login(token);
+  client.login(token).catch(onLoginFailed);
   return {
     stop: async why => {
       await Promise.allSettled([...sessions.values()].map(s => s.leave(why)));
