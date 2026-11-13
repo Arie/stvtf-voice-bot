@@ -1,7 +1,7 @@
 // The Mumble channels stv.tf wants the bot in: asked for on a match's page there, by whoever
 // has a say in its voice. The bot keeps a question open with stv.tf (`GET /voice/mumble`), which
 // answers the moment something changes, so a channel is joined as it is asked for; and tells it
-// how each goes (`POST /voice/mumble`), for the page to show.
+// how each goes (`POST <page>voice-status`), for the page to show.
 import net from "node:net";
 import { tell } from "../status.mjs";
 

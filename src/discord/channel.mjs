@@ -1,6 +1,6 @@
 // The bot in one voice channel: it receives each speaker's Opus as Discord sends it and hands it,
-// with who they are on Steam, to the match's forwarder. It leaves when told, when the channel is
-// empty of people, or when the match is gone.
+// with who they are on Steam, to the match's forwarder. It leaves when told, when moved, when the
+// channel is empty of people, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "../forward.mjs";
 import { tell } from "../status.mjs";

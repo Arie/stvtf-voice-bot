@@ -1,6 +1,6 @@
 // A channel's voice on its way to a match: each speaker's Opus frames batched five at a time
-// (100 ms) and posted in order. A match that is gone or a refused key stops it; anything else
-// (no stream yet, the site restarting) is waited out.
+// (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it;
+// anything else (no stream yet, the site restarting) is waited out.
 
 /** @typedef {{ steamid: string | null; discord: string; name: string }} Speaker */
 

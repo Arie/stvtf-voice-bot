@@ -1,5 +1,5 @@
-// Where a match's voice goes, from a link someone gave: only on the stv.tf hosts we know, so the
-// key never goes anywhere else.
+// Where a match's voice goes, from a link someone gave: only on the hosts given (`STVTF_HOSTS`),
+// so the key never goes anywhere else.
 
 const LOCAL = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
 

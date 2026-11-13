@@ -1,6 +1,6 @@
 # The voice bot as a Kamal app: one container, on the stv.tf host in Europe. It serves nothing
-# (no proxy, no ports): it connects out, to Discord and to the stv.tf of whichever region a
-# match is on.
+# (no proxy, no ports): it connects out, to Discord, to Mumble servers and to the stv.tf of
+# whichever region a match is on.
 #   bin/build && bin/deploy     (or: kamal deploy)
 #
 # A deploy drops the bot from the voice channels it is in (it says so there): `/stv join` again.

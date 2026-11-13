@@ -94,7 +94,7 @@ export function encode(type, message) {
   return Buffer.concat(parts);
 }
 
-/** @param {string} type @param {Buffer} body @returns {Record<string, any>} The fields we know of. */
+/** @param {string} type @param {Buffer} body @returns {Record<string, any>} The fields FIELDS names. */
 export function decode(type, body) {
   /** @type {Record<string, any>} */
   const out = {};

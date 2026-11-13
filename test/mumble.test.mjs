@@ -17,7 +17,7 @@ test("messages are written and read back as Mumble has them", () => {
     channel_id: [5, 6],
     message: "hi",
   });
-  // What we know nothing of is passed over.
+  // A field of no known number is passed over.
   assert.deepEqual(decode("Ping", Buffer.concat([encode("Ping", { timestamp: 7 }), Buffer.from([0xf8, 0x07, 0x01])])), {
     timestamp: 7,
   });
@@ -48,7 +48,7 @@ test("numbers in voice packets are Mumble's own, of one to nine bytes", () => {
 });
 
 test("a voice packet says who talks, and holds one Opus packet and whether the utterance ends", () => {
-  // Opus (type 4), to everyone; session 300; sequence 9; five bytes of Opus, the last of an utterance.
+  // Opus (type 4), to the channel; session 300; sequence 9; five bytes of Opus, the last of an utterance.
   const opus = Buffer.from([0x78, 1, 2, 3, 4]);
   const packet = Buffer.from([0x80, 0x81, 0x2c, 9, 0xa0, 5, ...opus, 0, 0, 0, 0]);
   assert.deepEqual(parseVoice(packet), { target: 0, session: 300, sequence: 9, opus, last: true });
