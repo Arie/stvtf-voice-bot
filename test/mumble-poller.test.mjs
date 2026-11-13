@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JobPoller } from "../src/mumble/poller.mjs";
-import { fetchOf, tick, unread } from "./stand.mjs";
+import { fetchOf, tick, unread, until } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/job.mjs").Job} Job */
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
@@ -232,4 +232,33 @@ test("an answer that is no answer is let go of unread", async () => {
   });
   assert.equal(await poller.poll(), false);
   assert.equal(body.cancelled, true);
+});
+
+test("stopped, the question open with stv.tf is let go, and what it answers starts nothing", async () => {
+  const w = world();
+  /** @type {AbortSignal | undefined} */
+  let signal;
+  /** @type {(r: unknown) => void} */
+  let answer = () => {};
+  const fetch = fetchOf((url, init) => ((signal = init.signal), new Promise(r => (answer = r))));
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch, start: w.start });
+  const polled = poller.poll();
+  await tick();
+  await poller.stop("restarting");
+  assert.equal(signal?.aborted, true);
+  answer({ ok: true, status: 200, json: async () => ({ jobs: [job()], version: 2 }) });
+  assert.equal(await polled, false);
+  assert.equal(w.started.length, 0);
+});
+
+test("stopped while waiting to ask again, it stops at once", async () => {
+  const w = world();
+  w.down = true;
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  let ended = false;
+  const running = poller.run().then(() => (ended = true));
+  await tick();
+  await poller.stop("restarting");
+  await until(() => ended);
+  await running;
 });

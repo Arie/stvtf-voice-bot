@@ -2,6 +2,7 @@
 // has a say in its voice. The bot keeps a question open with stv.tf (`GET /voice/mumble`), which
 // answers the moment something changes, so a channel is joined as it is asked for; and tells it
 // how each goes (`POST <page>voice-status`), for the page to show.
+import { setTimeout as sleep } from "node:timers/promises";
 import { discard } from "../http.mjs";
 import { postStatus } from "../status.mjs";
 import { channelOf, isJob } from "./job.mjs";
@@ -43,6 +44,8 @@ export class JobPoller {
     /** @type {Promise<unknown>[]} */
     this.statusPosts = [];
     this.stopped = false;
+    /** Ends the question open with stv.tf, and the wait before the next, once stopped. */
+    this.aborting = new AbortController();
     /** Whether stv.tf last refused the key. */
     this.refused = false;
   }
@@ -50,7 +53,8 @@ export class JobPoller {
   /** Asks what is wanted (waiting for a change, once it knows how things stand) and sees to it. */
   async poll() {
     const jobs = await this.#ask();
-    if (!jobs) return false;
+    // Stopped meanwhile: what it answers is for nobody.
+    if (!jobs || this.stopped) return false;
     for (const [key, had] of this.sessions) {
       const now = jobs.find(j => keyOf(j) === key);
       if (now && connectionKeyOf(now) === had.connectionKey) continue;
@@ -74,7 +78,7 @@ export class JobPoller {
     try {
       const r = await this.o.fetch(`${this.o.origin}/voice/mumble?since=${this.version}`, {
         headers: { Authorization: `Bearer ${this.o.key}` },
-        signal: AbortSignal.timeout(ASK_MS),
+        signal: AbortSignal.any([AbortSignal.timeout(ASK_MS), this.aborting.signal]),
         redirect: "error",
       });
       this.refused = r.status === 401;
@@ -134,7 +138,8 @@ export class JobPoller {
   /** Keeps asking until stopped. */
   async run() {
     while (!this.stopped)
-      if (!(await this.poll().catch(() => false))) await new Promise(r => setTimeout(r, this.retryIn()));
+      if (!(await this.poll().catch(() => false)))
+        await sleep(this.retryIn(), undefined, { signal: this.aborting.signal }).catch(() => {});
   }
 
   /** @param {string} key Which it is (`keyOf`). @param {Entry} had @param {string} why */
@@ -150,6 +155,7 @@ export class JobPoller {
   /** Leaves every channel: resolves once all are closed. @param {string} why */
   stop(why) {
     this.stopped = true;
+    this.aborting.abort();
     return Promise.all([...this.sessions].map(([key, had]) => this.#leave(key, had, why)));
   }
 }
