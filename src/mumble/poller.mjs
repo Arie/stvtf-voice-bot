@@ -5,7 +5,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { discard } from "../http.mjs";
 import { logOf } from "../log.mjs";
-import { postStatus } from "../status.mjs";
+import { STATE, postStatus } from "../status.mjs";
 import { channelOf, isJob } from "./job.mjs";
 
 /** @typedef {import("./job.mjs").Job} Job */
@@ -32,7 +32,7 @@ export class JobPoller {
   /**
    * @param {{
    *   origin: string; key: string; fetch?: typeof fetch; print?: (line: string) => void;
-   *   start: (job: Job, onStatus: (text: string, people?: { id: string; name: string }[]) => void) => Session | null;
+   *   start: (job: Job, onStatus: import("./session.mjs").OnStatus) => Session | null;
    * }} o `start` joins a channel (or says why not, and gives none).
    */
   constructor(o) {
@@ -110,12 +110,12 @@ export class JobPoller {
 
   /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
   #startJob(job) {
-    /** @type {(text: string, people?: { id: string; name: string }[]) => void} */
-    const onStatus = (text, people) =>
+    /** @type {import("./session.mjs").OnStatus} */
+    const onStatus = (state, text, people) =>
       void this.statusPosts.push(
         postStatus(
           { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
-          { kind: "mumble", status: text, people, asked: job.asked, job: job.slot, channel: channelOf(job) },
+          { kind: "mumble", state, status: text, people, asked: job.asked, job: job.slot, channel: channelOf(job) },
         ),
       );
     /** @type {Entry} */
@@ -126,7 +126,7 @@ export class JobPoller {
       try {
         entry.session = this.o.start(entry.job, onStatus);
       } catch {
-        onStatus("Could not join", []);
+        onStatus(STATE.failed, "Could not join", []);
       }
     };
     // The one before signs in by the same name: this one goes in once it is out.

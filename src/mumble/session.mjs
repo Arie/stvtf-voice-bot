@@ -3,6 +3,7 @@
 // certificate), so the match's page can put them on a player and keep them there.
 import { Forwarder } from "../forward.mjs";
 import { logOf } from "../log.mjs";
+import { STATE } from "../status.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
 import { addressOf } from "./address.mjs";
 import { channelOf, nameOf } from "./job.mjs";
@@ -14,7 +15,7 @@ const FLUSH_MS = 100,
 // What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
 const IN_USE = 5,
   NAMES = 3;
-/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
+/** @typedef {(state: import("../status.mjs").State, text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
  * @typedef {{ key: string; anywhere?: boolean; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void>; print?: (line: string) => void }} Options
@@ -51,9 +52,9 @@ class MumbleSession {
     const where = `${channelOf(job)} → ${job.page}`;
     this.logStatus = logOf(where, o.print);
     /** @type {OnStatus} */
-    this.onStatus = (text, people) => {
+    this.onStatus = (state, text, people) => {
       this.logStatus(text);
-      onStatus(text, people);
+      onStatus(state, text, people);
     };
     this.logAnswer = logOf(where, o.print);
     this.forwarder = new Forwarder({
@@ -109,6 +110,7 @@ class MumbleSession {
   #reportStatus() {
     const there = this.client?.people() ?? [];
     this.onStatus(
+      STATE.in,
       `${this.job.channel} · ${there.length}`,
       there.map(p => ({ id: this.#idOf(p), name: p.name })),
     );
@@ -130,7 +132,7 @@ class MumbleSession {
     } catch (e) {
       this.gone = true;
       // Told to leave, it has nothing more to say: another may be there by now.
-      if (!this.closing) this.onStatus(`Could not join: ${/** @type {Error} */ (e).message}`, []);
+      if (!this.closing) this.onStatus(STATE.failed, `Could not join: ${/** @type {Error} */ (e).message}`, []);
     }
   }
 
@@ -167,7 +169,7 @@ class MumbleSession {
         this.gone = true;
         this.timers.forEach(clearInterval);
         this.forwarder.stop();
-        this.onStatus(`Left: ${why}`, []);
+        this.onStatus(STATE.left, `Left: ${why}`, []);
       },
     });
     return c;

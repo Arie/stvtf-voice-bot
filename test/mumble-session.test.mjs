@@ -50,8 +50,10 @@ function session(over = {}, options = {}) {
   /** @type {string[]} */
   const statuses = [];
   /** @type {string[]} */
+  const states = [];
+  /** @type {string[]} */
   const logged = [];
-  const s = startSession(job(over), text => void statuses.push(text), {
+  const s = startSession(job(over), (state, text) => void (states.push(state), statuses.push(text)), {
     key: "k",
     lookup: lookupOf(["93.184.216.34"]),
     pause: async () => {},
@@ -66,7 +68,7 @@ function session(over = {}, options = {}) {
     ),
     ...options,
   });
-  return { s, servers, posts, statuses, logged, server: () => /** @type {Server} */ (servers.at(-1)) };
+  return { s, servers, posts, statuses, states, logged, server: () => /** @type {Server} */ (servers.at(-1)) };
 }
 /** @param {Server} server @param {number} n */
 const talk = (server, n) => {
@@ -179,4 +181,20 @@ test("how it goes is logged when it changes, and the key never", async () => {
     w.logged.every(l => l.startsWith("stvtf-voice-bot: mumble:mumble.example:Team_Comms → https://stv.tf/w/m1/")),
   );
   assert.ok(!w.logged.join("\n").includes("Bearer"));
+});
+
+test("what stv.tf is told says where the bot is: in, out again, or never in", async () => {
+  const w = await joined();
+  w.server().send("UserRemove", { session: 2, reason: "kicked" });
+  await until(() => w.states.length === 2);
+  assert.deepEqual(
+    w.states.map((s, n) => [s, w.statuses[n]]),
+    [
+      ["in", "Team Comms · 1"],
+      ["left", "Left: removed: kicked"],
+    ],
+  );
+  const never = session({}, { lookup: lookupOf(["10.0.0.1"]) });
+  await until(() => never.states.length);
+  assert.deepEqual(never.states, ["failed"]);
 });

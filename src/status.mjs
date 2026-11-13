@@ -6,8 +6,16 @@ import { discard } from "./http.mjs";
 const POST_MS = 3000;
 
 /**
+ * Where the bot is in a channel, for the page to go by (`status` is only for showing): in it,
+ * could not get in, or out again. The status says which channel and how many are there, why it
+ * could not join, or why it left.
+ */
+export const STATE = /** @type {const} */ ({ in: "in", failed: "failed", left: "left" });
+/** @typedef {(typeof STATE)[keyof typeof STATE]} State */
+
+/**
  * @param {{ page: string; key: string; invite: string | null; fetch?: typeof fetch }} target
- * @param {{ kind: "discord" | "mumble"; status?: string; people?: { id: string; name: string }[]; left?: boolean; asked?: number; job?: number; channel?: string }} body
+ * @param {{ kind: "discord" | "mumble"; state: State; status?: string; people?: { id: string; name: string }[]; left?: boolean; asked?: number; job?: number; channel?: string }} body
  */
 export async function postStatus(target, body) {
   try {

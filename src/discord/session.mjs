@@ -4,7 +4,7 @@
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "../forward.mjs";
 import { logOf } from "../log.mjs";
-import { postStatus } from "../status.mjs";
+import { STATE, postStatus } from "../status.mjs";
 
 // How often what is batched is flushed, how long joining may take, how often stv.tf is told how
 // it goes and who is here, and how long a lost connection has to come back by itself.
@@ -42,6 +42,8 @@ export class DiscordSession {
     /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
     this.frames = new Map();
     this.gone = false;
+    /** Whether it got into the channel. */
+    this.inChannel = false;
     /** @type {Promise<void> | null} Once told to leave: resolves when its goodbyes are out. */
     this.leaving = null;
   }
@@ -67,6 +69,7 @@ export class DiscordSession {
     // Unheard, it would end the process: it only ends this channel.
     this.connection.on("error", () => this.leave("voice error"));
     await this.voice.entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
+    this.inChannel = true;
     this.connection.on(VoiceConnectionStatus.Disconnected, () => this.#disconnected());
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
@@ -123,7 +126,7 @@ export class DiscordSession {
       .filter(m => !m.user.bot)
       .map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    postStatus(this.#statusTarget(), { kind: "discord", status, people, channel: this.channel.id });
+    postStatus(this.#statusTarget(), { kind: "discord", state: STATE.in, status, people, channel: this.channel.id });
   }
 
   /** Where stv.tf is told how it goes. */
@@ -159,7 +162,12 @@ export class DiscordSession {
     this.gone = true;
     clearInterval(this.timer);
     clearInterval(this.reporting);
-    const told = postStatus(this.#statusTarget(), { kind: "discord", left: true, channel: this.channel.id });
+    const told = postStatus(this.#statusTarget(), {
+      kind: "discord",
+      state: this.inChannel ? STATE.left : STATE.failed,
+      left: true,
+      channel: this.channel.id,
+    });
     const posted = this.forwarder.stop();
     try {
       this.connection?.destroy();

@@ -14,25 +14,28 @@ test("stv.tf is told how it goes in a channel, and who is in it, with the key an
   );
   await postStatus(
     { page: "https://stv.tf/r/abc/", key: "k", invite: "inv", fetch },
-    { kind: "discord", status: "In General", people: [{ id: "7", name: "a" }] },
+    { kind: "discord", state: "in", status: "In General", people: [{ id: "7", name: "a" }] },
   );
-  await postStatus({ page: "https://stv.tf/r/abc/", key: "k", invite: "inv", fetch }, { kind: "discord", left: true });
+  await postStatus(
+    { page: "https://stv.tf/r/abc/", key: "k", invite: "inv", fetch },
+    { kind: "discord", state: "left", left: true },
+  );
   assert.deepEqual(calls, [
     {
       url: "https://stv.tf/r/abc/voice-status",
       auth: "Bearer k",
-      body: { invite: "inv", kind: "discord", status: "In General", people: [{ id: "7", name: "a" }] },
+      body: { invite: "inv", kind: "discord", state: "in", status: "In General", people: [{ id: "7", name: "a" }] },
     },
     {
       url: "https://stv.tf/r/abc/voice-status",
       auth: "Bearer k",
-      body: { invite: "inv", kind: "discord", left: true },
+      body: { invite: "inv", kind: "discord", state: "left", left: true },
     },
   ]);
   // stv.tf not answering is no reason to stop.
   await postStatus(
     { page: "p/", key: "k", invite: "i", fetch: fetchOf(async () => Promise.reject(new Error("down"))) },
-    { kind: "discord", status: "x" },
+    { kind: "discord", state: "in", status: "x" },
   );
 });
 
@@ -40,10 +43,7 @@ test("what stv.tf answers is let go of unread", async () => {
   const body = unread();
   await postStatus(
     { page: "p/", key: "k", invite: "i", fetch: fetchOf(async () => ({ ok: true, status: 204, body })) },
-    {
-      kind: "discord",
-      status: "x",
-    },
+    { kind: "discord", state: "in", status: "x" },
   );
   assert.equal(body.cancelled, true);
 });

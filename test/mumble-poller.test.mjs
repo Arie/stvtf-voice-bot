@@ -4,12 +4,12 @@ import { JobPoller } from "../src/mumble/poller.mjs";
 import { fetchOf, tick, unread, until } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/job.mjs").Job} Job */
-/** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
+/** @typedef {import("../src/mumble/session.mjs").OnStatus} OnStatus */
 /** @typedef {{ job: Job; onStatus: OnStatus; delay: number; leave: (why: string) => Promise<void> | void }} Started */
 /**
  * @typedef {{
  *   wanted: unknown[]; version: number; down: boolean; fetch: typeof fetch; start: (j: Job, onStatus: OnStatus) => Started | null;
- *   told: { url: string; status?: string; asked?: number; channel?: string; job?: number }[]; started: Started[]; left: [string, string, string][];
+ *   told: { url: string; state?: string; status?: string; asked?: number; channel?: string; job?: number }[]; started: Started[]; left: [string, string, string][];
  *   logged: string[]; print: (line: string) => void;
  * }} World
  */
@@ -54,7 +54,7 @@ function world() {
     /** @type {Started} */
     const s = { job: j, onStatus, delay: j.delay, leave: why => void w.left.push([j.match, j.channel, why]) };
     w.started.push(s);
-    onStatus(`In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
+    onStatus("in", `In ${j.channel} with 2 people`, [{ id: "mumble:mumble.example:user:1", name: "arie" }]);
     return s;
   };
   return w;
@@ -74,6 +74,7 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
       url: "https://stv.tf/w/m1/voice-status",
       invite: "inv",
       kind: "mumble",
+      state: "in",
       status: "In Team A with 2 people",
       people: [{ id: "mumble:mumble.example:user:1", name: "arie" }],
       channel: "mumble:mumble.example:Team_A",
@@ -121,7 +122,7 @@ test("a server that cannot be joined is said so, and not tried over and over", a
   const w = world();
   w.start = (j, onStatus) => {
     w.started.push({ job: j, onStatus, delay: j.delay, leave: () => {} });
-    onStatus("Could not join: the server refused me: Wrong server password");
+    onStatus("failed", "Could not join: the server refused me: Wrong server password");
     return null;
   };
   const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start, print: w.print });
@@ -303,4 +304,17 @@ test("how stv.tf answers is logged when it changes, and the key never", async ()
     "stvtf-voice-bot: https://stv.tf/voice/mumble: answering",
   ]);
   assert.ok(!w.logged.join("\n").includes("SECRET"));
+});
+
+test("one that throws as it starts is told as failed", async () => {
+  const w = world();
+  const start = () => {
+    throw new Error("no");
+  };
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start, print: w.print });
+  await poller.poll();
+  assert.deepEqual(
+    w.told.map(t => [t.state, t.status]),
+    [["failed", "Could not join"]],
+  );
 });

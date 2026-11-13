@@ -29,7 +29,7 @@ function world() {
       this.destroyed = true;
     },
   });
-  /** @type {{ status?: string; channel?: string; frames?: string[]; left?: boolean }[]} */
+  /** @type {{ status?: string; state?: string; channel?: string; frames?: string[]; left?: boolean }[]} */
   const told = [];
   const fetch = fetchOf(
     async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" }),
@@ -144,4 +144,23 @@ test("leaving resolves once its goodbyes are out, not before", async () => {
   await leaving;
   assert.equal(w.c.leave("again"), w.c.leave("again"), "once");
   assert.ok(w.told.some(t => t.left));
+});
+
+test("what stv.tf is told says where the bot is: in, out again, or never in", async () => {
+  const w = world();
+  await w.c.join();
+  w.c.leave("done");
+  await tick();
+  assert.deepEqual(
+    w.told.map(t => t.state),
+    ["in", "left"],
+  );
+  const never = world();
+  never.c.voice.entersState = stand(async () => Promise.reject(new Error("timed out")));
+  await never.c.join().catch(() => never.c.leave("join failed"));
+  await tick();
+  assert.deepEqual(
+    never.told.map(t => [t.state, t.left]),
+    [["failed", true]],
+  );
 });
