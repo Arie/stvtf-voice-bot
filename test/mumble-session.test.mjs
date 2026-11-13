@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { tlsOptions } from "../src/mumble/client.mjs";
 import { nameOf } from "../src/mumble/job.mjs";
 import { startSession } from "../src/mumble/session.mjs";
-import { fake, lookupOf, tick, welcomeIn } from "./fake-mumble.mjs";
-import { fetchOf } from "./stand.mjs";
+import { fake, lookupOf, welcomeIn } from "./fake-mumble.mjs";
+import { fetchOf, tick, until } from "./stand.mjs";
 
 /** @typedef {import("./fake-mumble.mjs").Server} Server */
 
@@ -49,6 +49,7 @@ function session(over = {}) {
   const s = startSession(job(over), text => void statuses.push(text), {
     key: "k",
     lookup: lookupOf(["93.184.216.34"]),
+    pause: async () => {},
     connect: () => {
       const server = fake();
       servers.push(server);
@@ -60,30 +61,33 @@ function session(over = {}) {
   });
   return { s, servers, posts, statuses, server: () => /** @type {Server} */ (servers.at(-1)) };
 }
-const wait = (/** @type {number} */ ms) => new Promise(r => setTimeout(r, ms));
 /** @param {Server} server @param {number} n */
 const talk = (server, n) => {
   for (let i = 0; i < n; i++) server.send("UDPTunnel", Buffer.from([0x80, 9, i, 2, 0x78, i]));
 };
 
-test("once told to leave, nothing more is passed on", async () => {
+/** A session in its channel. */
+async function joined() {
   const w = session();
-  await wait(5);
+  await until(() => w.servers.length);
   welcomeIn(w.server());
-  await wait(5);
+  await until(() => w.statuses.length);
+  return w;
+}
+
+test("once told to leave, nothing more is passed on", async () => {
+  const w = await joined();
   talk(w.server(), 3);
   await tick();
-  w.s.leave("done");
+  const left = w.s.leave("done");
   talk(w.server(), 10);
-  await wait(300);
+  await left;
+  for (let n = 0; n < 10; n++) await tick();
   assert.equal(w.posts.flatMap(p => p.frames).length, 3);
 });
 
 test("leaving resolves once the connection is closed, joined or not yet", async () => {
-  const w = session();
-  await wait(5);
-  welcomeIn(w.server());
-  await wait(5);
+  const w = await joined();
   const left = w.s.leave("done");
   assert.ok(left instanceof Promise);
   await left;
@@ -98,7 +102,7 @@ test("leaving resolves once the connection is closed, joined or not yet", async 
   );
 
   const early = session();
-  await wait(5);
+  await until(() => early.servers.length);
   await early.s.leave("done");
   assert.equal(early.server().closed, true);
 });
@@ -106,25 +110,26 @@ test("leaving resolves once the connection is closed, joined or not yet", async 
 test("a name in use is taken with a letter after it", async () => {
   const w = session();
   for (let n = 1; n <= 2; n++) {
-    await wait(5);
+    await until(() => w.servers.length === n);
     w.server().send("Reject", { type: 5, reason: "Username already in use" });
   }
-  await wait(5);
+  await until(() => w.servers.length === 3);
+  await until(() => w.server().sent("Authenticate").length);
   assert.deepEqual(
     w.servers.map(s => s.sent("Authenticate")[0].username),
     ["stv.tf-m1", "stv.tf-m1-b", "stv.tf-m1-c"],
   );
   welcomeIn(w.server());
-  await wait(5);
+  await until(() => w.statuses.length);
   assert.equal(w.statuses.at(-1), "Team Comms · 1");
   await w.s.leave("done");
 });
 
 test("told to leave while joining, it says nothing more", async () => {
   const w = session();
-  await wait(5);
+  await until(() => w.servers.length);
   await w.s.leave("moved");
-  await wait(5);
+  for (let n = 0; n < 10; n++) await tick();
   assert.deepEqual(w.statuses, []);
 });
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { joinCommand } from "../src/discord/join.mjs";
-import { stand } from "./stand.mjs";
+import { stand, tick } from "./stand.mjs";
 
 /** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
 /** @typedef {Parameters<typeof joinCommand>[1]} Options */
@@ -58,7 +58,7 @@ test("it says it is recording before it knows who is not linked, then says that"
   let known = () => {};
   const w = world({ unlinked: () => new Promise(r => (known = r)) });
   const joined = joinCommand(w.i, w.o);
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.match(w.said.find(s => s[0] === "edit")?.[1]?.content ?? "", /Recording/);
   known(["arie"]);
   await joined;
@@ -88,7 +88,7 @@ test("what it says in a channel mentions nobody, whatever names are in it", asyn
   const w = world({ unlinked: async () => ["@everyone"] });
   await joinCommand(w.i, w.o);
   w.made().o.onGone("/stv leave by @everyone");
-  await new Promise(r => setImmediate(r));
+  await tick();
   for (const kind of ["follow", "channel"])
     assert.deepEqual(w.said.find(s => s[0] === kind)?.[1]?.allowedMentions, { parse: [] }, kind);
 });

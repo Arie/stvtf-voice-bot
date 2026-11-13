@@ -7,3 +7,15 @@ export const stand = fake => /** @type {T} */ (fake);
 
 /** A fetch that answers as `f` does. @param {(url: string, init: Init) => unknown} f @returns {typeof fetch} */
 export const fetchOf = f => stand(f);
+
+/** A turn of the event loop. */
+export const tick = () => new Promise(r => setImmediate(r));
+
+/** Waits a turn at a time until `f()` holds, as long as it takes but no longer than `turns`. @param {() => unknown} f */
+export async function until(f, turns = 1000) {
+  for (let n = 0; n < turns; n++) {
+    if (f()) return;
+    await tick();
+  }
+  throw new Error(`not after ${turns} turns: ${f}`);
+}

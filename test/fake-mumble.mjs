@@ -35,7 +35,6 @@ export function fake() {
   };
   return server;
 }
-export const tick = () => new Promise(r => setImmediate(r));
 
 /** @typedef {ReturnType<typeof fake>} Server */
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Forwarder } from "../src/forward.mjs";
-import { fetchOf } from "./stand.mjs";
+import { fetchOf, tick } from "./stand.mjs";
 
 /** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number }} Body */
 
@@ -53,8 +53,9 @@ test("each speaker has batches of their own", async () => {
 });
 
 test("slow posts keep their order", async () => {
+  // The first answers only after a few turns, once the rest have come.
   const { posts, fetch } = fake(async n => {
-    await new Promise(r => setTimeout(r, n === 1 ? 30 : 0));
+    for (let t = 0; t < (n === 1 ? 5 : 0); t++) await tick();
     return { status: 200, text: "ok" };
   });
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
@@ -124,14 +125,14 @@ test("what waits behind a slow post goes as one post a speaker, and a post has a
   });
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 5; i++) f.add(speaker, Buffer.from([i]));
-  await new Promise(r => setImmediate(r));
+  await tick();
   for (let i = 5; i < 20; i++) f.add(speaker, Buffer.from([i]));
   const done = f.flush();
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.equal(posts.length, 1, "one at a time");
   assert.ok(posts[0].signal instanceof AbortSignal);
   answers[0]();
-  await new Promise(r => setImmediate(r));
+  await tick();
   answers[1]();
   await done;
   assert.deepEqual(
@@ -164,7 +165,7 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   );
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
   for (let i = 0; i < 5; i++) f.add(speaker, Buffer.from([i]));
-  await new Promise(r => setImmediate(r));
+  await tick();
   const posting = f.posting;
   const other = { steamid: null, id: "2", name: "b" };
   for (let n = 0; n < 1000; n++) for (let i = 0; i < 5; i++) f.add(n % 2 ? speaker : other, Buffer.from([i]));
@@ -172,7 +173,7 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
   assert.equal(f.waiting.length, 100);
   for (let n = 0; n < 200 && answers.length; n++) {
     answers.shift()?.();
-    await new Promise(r => setImmediate(r));
+    await tick();
   }
   await f.flush();
   assert.equal(posts, 101);

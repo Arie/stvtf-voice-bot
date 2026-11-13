@@ -16,7 +16,7 @@ const IN_USE = 5,
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
  * @typedef {{ key: string; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
- *   fetch?: typeof fetch }} Options `lookup`, `connect` and `fetch` are for tests.
+ *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void> }} Options `lookup`, `connect`, `fetch` and `pause` are for tests.
  */
 
 /**
@@ -78,7 +78,7 @@ class MumbleSession {
       if (this.client?.inChannel) {
         this.client.say(`Leaving: ${why}`);
         // The goodbye gets a moment to go out.
-        await new Promise(r => setTimeout(r, 200));
+        await (this.o.pause ?? (ms => new Promise(r => setTimeout(r, ms))))(200);
       }
       this.client?.leave(why);
       // A join under way ends once its connection is closed; one not yet begun is not begun.

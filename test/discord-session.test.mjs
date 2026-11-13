@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { DiscordSession } from "../src/discord/session.mjs";
-import { fetchOf, stand } from "./stand.mjs";
+import { fetchOf, stand, tick } from "./stand.mjs";
 
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */
 function world() {
@@ -60,7 +60,7 @@ test("what stv.tf is told says which channel it is of", async () => {
   const w = world();
   await w.c.join();
   w.c.leave("done");
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.deepEqual(
     w.told.map(t => [t.status ?? "left", t.channel]),
     [
@@ -82,16 +82,16 @@ test("dragged to another channel, it leaves rather than record there", async () 
 test("stv.tf is told who is here when that changes, not when anyone on the server mutes", async () => {
   const w = world();
   await w.c.join();
-  await new Promise(r => setImmediate(r));
+  await tick();
   const before = w.told.length;
   w.c.update({ id: "1", channelId: "42" }, { id: "1", channelId: "42" });
   w.c.update({ id: "7", channelId: "50" }, { id: "7", channelId: "51" });
   w.c.update({ id: "7", channelId: null }, { id: "7", channelId: "50" });
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.equal(w.told.length, before);
   w.members.set("7", w.member("7", "coach"));
   w.c.update({ id: "7", channelId: "50" }, { id: "7", channelId: "42" });
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.equal(w.told.at(-1)?.status, "General · 2");
   w.c.leave("done");
 });

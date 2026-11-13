@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JobPoller } from "../src/mumble/poller.mjs";
-import { fetchOf } from "./stand.mjs";
+import { fetchOf, tick } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/job.mjs").Job} Job */
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
@@ -13,7 +13,6 @@ import { fetchOf } from "./stand.mjs";
  * }} World
  */
 
-const tick = () => new Promise(r => setImmediate(r));
 /** @param {Record<string, unknown>} [over] */
 const job = (over = {}) => ({
   match: "m1",
@@ -167,7 +166,7 @@ test("a channel joined anew waits for the old connection to close (both sign in 
   w.wanted = [job({ channel: "Team B", delay: 5 })];
   await poller.poll();
   closed();
-  await new Promise(r => setImmediate(r));
+  await tick();
   assert.deepEqual(
     w.started.map(s => [s.job.channel, s.delay]),
     [

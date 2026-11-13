@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MumbleClient, voiceId } from "../src/mumble/client.mjs";
-import { fake, tick, welcome, welcomeIn } from "./fake-mumble.mjs";
+import { fake, welcome, welcomeIn } from "./fake-mumble.mjs";
+import { tick } from "./stand.mjs";
 
 test("it signs in as a bot, goes to the channel, and says it is recording", async () => {
   const server = fake();
