@@ -17,7 +17,7 @@ export class DiscordSession {
   /**
    * @param {{
    *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };
-   *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "lookup">; onGone: (why: string) => void;
+   *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "lookup">; onGone: (why: string) => Promise<unknown> | void;
    *   fetch?: typeof fetch; voice?: { joinVoiceChannel: typeof joinVoiceChannel; entersState: typeof entersState };
    * }} o `fetch` and `voice` are for tests.
    */
@@ -42,6 +42,8 @@ export class DiscordSession {
     /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
     this.frames = new Map();
     this.gone = false;
+    /** @type {Promise<void> | null} Once told to leave: resolves when its goodbyes are out. */
+    this.leaving = null;
   }
 
   /** How far the match's stream is behind, in seconds: for what is said from now on. */
@@ -151,16 +153,19 @@ export class DiscordSession {
   }
 
   /** @param {string} why */
+  /** @param {string} why @returns {Promise<void>} Once stv.tf is told, what was said is posted, and the channel told. */
   leave(why) {
-    if (this.gone) return;
+    if (this.leaving) return this.leaving;
     this.gone = true;
     clearInterval(this.timer);
     clearInterval(this.reporting);
-    postStatus(this.#statusTarget(), { kind: "discord", left: true, channel: this.channel.id });
-    this.forwarder.stop();
+    const told = postStatus(this.#statusTarget(), { kind: "discord", left: true, channel: this.channel.id });
+    const posted = this.forwarder.stop();
     try {
       this.connection?.destroy();
     } catch {}
-    this.o.onGone(why);
+    const said = this.o.onGone(why);
+    this.leaving = Promise.allSettled([told, posted, said]).then(() => {});
+    return this.leaving;
   }
 }

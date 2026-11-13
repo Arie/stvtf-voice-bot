@@ -5,7 +5,7 @@ import { noMentions, reply } from "./messages.mjs";
 
 /**
  * @typedef {{
- *   join: () => Promise<void>; leave: (why: string) => void; unlinked: () => Promise<string[]>;
+ *   join: () => Promise<void>; leave: (why: string) => Promise<unknown> | void; unlinked: () => Promise<string[]>;
  * }} Joined
  */
 
@@ -55,8 +55,10 @@ async function joinAndAnnounce(i, o, voice, match, delay) {
       // Only one that was in says it left: one that would not join says so itself.
       if (o.sessions.get(guild.id) !== session) return;
       o.sessions.delete(guild.id);
-      guild.members.me?.setNickname(null).catch(() => {});
-      if (voice.type === ChannelType.GuildVoice) voice.send(noMentions(`Left: ${why}`)).catch(() => {});
+      return Promise.allSettled([
+        guild.members.me?.setNickname(null),
+        voice.type === ChannelType.GuildVoice && voice.send(noMentions(`Left: ${why}`)),
+      ]);
     },
   });
   try {

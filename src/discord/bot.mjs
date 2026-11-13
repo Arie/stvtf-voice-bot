@@ -47,7 +47,7 @@ async function onCommand(i, o, sessions) {
 
 /**
  * Signs in to Discord with `token` and takes `/stv` commands, for matches on `hosts` (voice goes
- * there with `key`). Its `stop` leaves every channel and signs out.
+ * there with `key`). Its `stop` leaves every channel, once each has said so, and signs out.
  * @param {{ hosts: string[]; key: string; token: string }} o
  * @returns {{ stop: (why: string) => Promise<void> }}
  */
@@ -90,7 +90,7 @@ export function startDiscord({ hosts, key, token }) {
   client.login(token);
   return {
     stop: async why => {
-      for (const s of sessions.values()) s.leave(why);
+      await Promise.allSettled([...sessions.values()].map(s => s.leave(why)));
       await client.destroy();
     },
   };

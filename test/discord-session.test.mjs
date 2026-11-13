@@ -29,7 +29,7 @@ function world() {
       this.destroyed = true;
     },
   });
-  /** @type {{ status?: string; channel?: string; frames?: string[] }[]} */
+  /** @type {{ status?: string; channel?: string; frames?: string[]; left?: boolean }[]} */
   const told = [];
   const fetch = fetchOf(
     async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" }),
@@ -128,4 +128,20 @@ test("a connection lost a moment is waited for; one that does not come back is l
     w.c.leave("done");
   }
   assert.deepEqual(waited.slice(0, 3), ["ready", "signalling", "connecting"]);
+});
+
+test("leaving resolves once its goodbyes are out, not before", async () => {
+  const w = world();
+  await w.c.join();
+  /** @type {() => void} */
+  let said = () => {};
+  w.c.o.onGone = () => new Promise(r => (said = () => r(undefined)));
+  let left = false;
+  const leaving = w.c.leave("restarting").then(() => (left = true));
+  for (let n = 0; n < 5; n++) await tick();
+  assert.equal(left, false, "the channel not told yet");
+  said();
+  await leaving;
+  assert.equal(w.c.leave("again"), w.c.leave("again"), "once");
+  assert.ok(w.told.some(t => t.left));
 });
