@@ -11,7 +11,7 @@ const FLUSH_MS = 100,
   JOIN_MS = 30_000,
   STATUS_MS = 10_000;
 
-export class Channel {
+export class DiscordSession {
   /**
    * @param {{
    *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };

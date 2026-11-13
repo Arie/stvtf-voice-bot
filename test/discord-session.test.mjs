@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
-import { Channel } from "../src/discord/channel.mjs";
+import { DiscordSession } from "../src/discord/session.mjs";
 import { fetchOf, stand } from "./stand.mjs";
 
 /** A made-up Discord voice channel, its server, and the bot's voice connection to it. */
@@ -31,7 +31,7 @@ function world() {
   );
   /** @type {string[]} */
   const gone = [];
-  const c = new Channel({
+  const c = new DiscordSession({
     channel: stand(channel),
     match: { voice: "https://stv.tf/w/m/voice", page: "https://stv.tf/w/m/", invite: "inv" },
     delay: 90,

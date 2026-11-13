@@ -5,7 +5,7 @@ import { stand } from "./stand.mjs";
 
 /** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
 /** @typedef {Parameters<typeof joinCommand>[1]} Options */
-/** @typedef {import("../src/discord/join.mjs").Joined & { o: Parameters<Options["makeChannel"]>[0] }} Made */
+/** @typedef {import("../src/discord/join.mjs").Joined & { o: Parameters<Options["makeSession"]>[0] }} Made */
 
 /**
  * A made-up `/stv join`, with what the bot said, and a made-up channel to join.
@@ -37,10 +37,10 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
     key: "k",
     nick: "stv.tf",
     defaultDelay: 90,
-    channels: new Map(),
+    sessions: new Map(),
     joining: new Set(),
     whoFor: () => stand({}),
-    makeChannel: c =>
+    makeSession: c =>
       (made = {
         o: c,
         join: async () => {},
@@ -75,7 +75,7 @@ test("however a join ends, the server can be joined again", async () => {
     assert.equal(w.o.joining.size, 0);
   }
   const w = world();
-  w.o.makeChannel = () => ({
+  w.o.makeSession = () => ({
     join: async () => Promise.reject(new Error("no")),
     leave: () => {},
     unlinked: async () => [],

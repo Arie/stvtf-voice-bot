@@ -3,7 +3,7 @@
 // players (their Steam accounts, linked through Discord on stv.tf). One channel per server.
 import { ChannelType, Client, GatewayIntentBits, SlashCommandBuilder } from "discord.js";
 import { homeOf } from "../match.mjs";
-import { Channel } from "./channel.mjs";
+import { DiscordSession } from "./session.mjs";
 import { mayControl } from "./control.mjs";
 import { joinCommand, noMentions, reply } from "./join.mjs";
 import { Who } from "./who.mjs";
@@ -44,29 +44,29 @@ const NOT_IN = "Join my voice channel first.";
 
 /**
  * Whether whoever gave the command is in the voice channel the bot is in.
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {Channel} here
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {DiscordSession} session
  */
-async function inChannel(i, here) {
+async function inChannel(i, session) {
   const member = await i.guild?.members.fetch(i.user.id);
-  return mayControl(member?.voice.channelId, here.channel.id);
+  return mayControl(member?.voice.channelId, session.channel.id);
 }
 
 /**
  * `/stv leave` and `/stv delay`: for those in the bot's channel only.
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {Channel | undefined} here
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {DiscordSession | undefined} session
  */
-async function control(i, here) {
-  if (!here) return reply(i, "Not in a channel.");
-  if (!(await inChannel(i, here))) return reply(i, NOT_IN);
+async function control(i, session) {
+  if (!session) return reply(i, "Not in a channel.");
+  if (!(await inChannel(i, session))) return reply(i, NOT_IN);
   if (i.options.getSubcommand() === "leave") {
-    here.leave(`/stv leave by ${i.user.displayName}`);
+    session.leave(`/stv leave by ${i.user.displayName}`);
     return reply(i, "Left.");
   }
-  here.forwarder.delay = i.options.getNumber("delay", true);
-  const text = `tv_delay: ${here.forwarder.delay} s${here.forwarder.delay ? "" : " (live)"}`;
+  session.forwarder.delay = i.options.getNumber("delay", true);
+  const text = `tv_delay: ${session.forwarder.delay} s${session.forwarder.delay ? "" : " (live)"}`;
   // Told where it is recorded, wherever the command was given.
-  if (here.channel.type === ChannelType.GuildVoice && i.channelId !== here.channel.id)
-    here.channel.send(noMentions(text)).catch(() => {});
+  if (session.channel.type === ChannelType.GuildVoice && i.channelId !== session.channel.id)
+    session.channel.send(noMentions(text)).catch(() => {});
   return i.reply(noMentions(text));
 }
 
@@ -77,8 +77,8 @@ async function control(i, here) {
  * @returns {{ stop: (why: string) => Promise<void> }}
  */
 export function startDiscord({ hosts, key, token }) {
-  /** @type {Map<string, Channel>} The channel the bot is in, by server. */
-  const channels = new Map();
+  /** @type {Map<string, DiscordSession>} The bot in a channel, by server. */
+  const sessions = new Map();
   /** @type {Set<string>} Servers the bot is on its way into a channel of. */
   const joining = new Set();
   /** @type {Map<string, Who>} By stv.tf origin. */
@@ -110,22 +110,22 @@ export function startDiscord({ hosts, key, token }) {
     key,
     nick: NICK,
     defaultDelay: DEFAULT_DELAY,
-    channels,
+    sessions,
     joining,
     whoFor,
-    makeChannel: o => new Channel(o),
+    makeSession: o => new DiscordSession(o),
   };
 
   client.on("interactionCreate", async i => {
     if (!i.isChatInputCommand() || i.commandName !== "stv") return;
-    const here = i.guild ? channels.get(i.guild.id) : undefined;
+    const session = i.guild ? sessions.get(i.guild.id) : undefined;
     try {
       switch (i.options.getSubcommand()) {
         case "join":
           return await joinCommand(i, joinOptions);
         case "leave":
         case "delay":
-          return await control(i, here);
+          return await control(i, session);
         case "link":
           return await reply(i, `Link Steam: ${homeOf(hosts)}/voice/link`);
       }
@@ -135,12 +135,12 @@ export function startDiscord({ hosts, key, token }) {
   });
 
   // Someone came or went, or the bot was moved.
-  client.on("voiceStateUpdate", (old, now) => channels.get(old.guild.id)?.update(old, now));
+  client.on("voiceStateUpdate", (old, now) => sessions.get(old.guild.id)?.update(old, now));
 
   client.login(token);
   return {
     stop: async why => {
-      for (const c of channels.values()) c.leave(why);
+      for (const s of sessions.values()) s.leave(why);
       await client.destroy();
     },
   };
