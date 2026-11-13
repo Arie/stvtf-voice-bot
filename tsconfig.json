@@ -14,5 +14,5 @@
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*.mjs", "test/**/*.mjs"]
+  "include": ["src/**/*.mjs", "test/**/*.mjs", "script/**/*.mjs"]
 }
