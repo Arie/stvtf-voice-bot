@@ -126,7 +126,7 @@ test("leaving resolves once the connection is closed, joined or not yet", async 
   assert.equal(early.server().closed, true);
 });
 
-test("a name in use is taken with a number", async () => {
+test("a name in use is taken with a letter after it", async () => {
   const w = session();
   for (let n = 1; n <= 2; n++) {
     await wait(5);

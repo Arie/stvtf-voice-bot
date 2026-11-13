@@ -15,7 +15,7 @@ export class DiscordSession {
   /**
    * @param {{
    *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };
-   *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "steamid">; onGone: (why: string) => void;
+   *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "lookup">; onGone: (why: string) => void;
    *   fetch?: typeof fetch; voice?: { joinVoiceChannel: typeof joinVoiceChannel; entersState: typeof entersState };
    * }} o `fetch` and `voice` are for tests.
    */
@@ -75,9 +75,9 @@ export class DiscordSession {
     // Who they are is known from their first frame on; while it is asked, theirs wait in order.
     const before = this.frames.get(id) ?? Promise.resolve();
     const then = before.then(async () => {
-      const steamid = this.o.who.peek(id) ?? (await this.o.who.steamid(id));
+      const steamid = this.o.who.peek(id) ?? (await this.o.who.lookup(id));
       const member = this.channel.guild.members.cache.get(id);
-      this.forwarder.frame({ steamid, id, name: member?.displayName ?? "someone" }, opus);
+      this.forwarder.add({ steamid, id, name: member?.displayName ?? "someone" }, opus);
     });
     this.frames.set(id, then);
   }
@@ -94,7 +94,7 @@ export class DiscordSession {
   async unlinked() {
     const out = [];
     for (const m of this.channel.members.values())
-      if (!m.user.bot && !(await this.o.who.steamid(m.id))) out.push(m.displayName);
+      if (!m.user.bot && !(await this.o.who.lookup(m.id))) out.push(m.displayName);
     return out;
   }
 

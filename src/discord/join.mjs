@@ -55,7 +55,7 @@ async function joinAndAnnounce(i, o, voice, match, delay) {
     match,
     delay,
     key: o.key,
-    who: o.whoFor(match.who),
+    who: o.whoFor(match.whoUrl),
     onGone: why => {
       o.sessions.delete(guild.id);
       guild.members.me?.setNickname(null).catch(() => {});

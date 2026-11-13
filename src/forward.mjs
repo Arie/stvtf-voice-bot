@@ -43,7 +43,7 @@ export class Forwarder {
   }
 
   /** @param {Speaker} speaker @param {Buffer} opus */
-  frame(speaker, opus) {
+  add(speaker, opus) {
     if (this.stopped) return;
     let b = this.batches.get(speaker.id);
     if (!b) this.batches.set(speaker.id, (b = { speaker, frames: [] }));

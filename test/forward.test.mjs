@@ -26,7 +26,7 @@ function fake(answer = () => ({ status: 200, text: "held until tick 1" })) {
 test("frames go five at a time, in order, with the speaker, the delay and the key", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "https://stv.tf/w/x/voice", key: "k", delay: 90, fetch });
-  for (let i = 0; i < 12; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 0; i < 12; i++) f.add(speaker, Buffer.from([i]));
   await f.flush();
   assert.deepEqual(
     posts.map(p => p.body.frames.length),
@@ -45,8 +45,8 @@ test("frames go five at a time, in order, with the speaker, the delay and the ke
 test("each speaker has batches of their own", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "u", key: "k", delay: 0, fetch });
-  f.frame(speaker, Buffer.from([1]));
-  f.frame({ steamid: null, id: "2", name: "coach" }, Buffer.from([2]));
+  f.add(speaker, Buffer.from([1]));
+  f.add({ steamid: null, id: "2", name: "coach" }, Buffer.from([2]));
   await f.flush();
   assert.equal(posts.length, 2);
   assert.deepEqual([posts[1].body.steamid, posts[1].body.discord, posts[1].body.name], [null, "2", "coach"]);
@@ -58,7 +58,7 @@ test("slow posts keep their order", async () => {
     return { status: 200, text: "ok" };
   });
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
-  for (let i = 0; i < 10; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 0; i < 10; i++) f.add(speaker, Buffer.from([i]));
   await f.flush();
   assert.deepEqual(
     posts.flatMap(p => p.body.frames).map(b => Buffer.from(b, "base64")[0]),
@@ -74,7 +74,7 @@ test("a match that is gone, or a refused key, stops it and says why", async () =
     const { posts, fetch } = fake(() => ({ status, text: "" }));
     let stopped = "";
     const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, onStop: w => (stopped = w) });
-    for (let i = 0; i < 10; i++) f.frame(speaker, Buffer.from([i]));
+    for (let i = 0; i < 10; i++) f.add(speaker, Buffer.from([i]));
     await f.flush();
     assert.equal(posts.length, 1, "no more after the first refusal");
     assert.match(stopped, why);
@@ -85,7 +85,7 @@ test("a match that is gone, or a refused key, stops it and says why", async () =
 test("a hiccup (the stream not there yet, the site restarting) is waited out, not fatal", async () => {
   const { posts, fetch } = fake(n => (n === 1 ? { status: 409, text: "no stream yet" } : { status: 200, text: "ok" }));
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
-  for (let i = 0; i < 10; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 0; i < 10; i++) f.add(speaker, Buffer.from([i]));
   await f.flush();
   assert.equal(f.stopped, false);
   assert.equal(posts.length, 2, "the next batch still goes");
@@ -94,10 +94,10 @@ test("a hiccup (the stream not there yet, the site restarting) is waited out, no
 test("the delay can change as it goes", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
-  f.frame(speaker, Buffer.from([1]));
+  f.add(speaker, Buffer.from([1]));
   await f.flush();
   f.delay = 0;
-  f.frame(speaker, Buffer.from([2]));
+  f.add(speaker, Buffer.from([2]));
   await f.flush();
   assert.deepEqual(
     posts.map(p => p.body.delay),
@@ -108,7 +108,7 @@ test("the delay can change as it goes", async () => {
 test("posts say which voice channel the speaker is in", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "https://stv.tf/w/x/voice", key: "k", delay: 90, channel: "42", fetch });
-  f.frame(speaker, Buffer.from([1]));
+  f.add(speaker, Buffer.from([1]));
   await f.flush();
   assert.equal(posts[0].body.channel, "42");
 });
@@ -123,9 +123,9 @@ test("what waits behind a slow post goes as one post a speaker, and a post has a
     return new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "held" })));
   });
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
-  for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 0; i < 5; i++) f.add(speaker, Buffer.from([i]));
   await new Promise(r => setImmediate(r));
-  for (let i = 5; i < 20; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 5; i < 20; i++) f.add(speaker, Buffer.from([i]));
   const done = f.flush();
   await new Promise(r => setImmediate(r));
   assert.equal(posts.length, 1, "one at a time");
@@ -148,7 +148,7 @@ test("posts carry the invite, and a refused one stops it", async () => {
   const { posts, fetch } = fake(() => ({ status: 403, text: "not invited" }));
   let why = "";
   const f = new Forwarder({ url: "u", key: "k", delay: 90, invite: "abc", fetch, onStop: w => (why = w) });
-  f.frame(speaker, Buffer.from([1]));
+  f.add(speaker, Buffer.from([1]));
   await f.flush();
   assert.equal(posts[0].body.invite, "abc");
   assert.match(why, /invite/);
@@ -163,11 +163,11 @@ test("behind a slow post, speakers taking turns add nothing to wait on but what 
     () => (posts++, new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "" })))),
   );
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
-  for (let i = 0; i < 5; i++) f.frame(speaker, Buffer.from([i]));
+  for (let i = 0; i < 5; i++) f.add(speaker, Buffer.from([i]));
   await new Promise(r => setImmediate(r));
   const posting = f.posting;
   const other = { steamid: null, id: "2", name: "b" };
-  for (let n = 0; n < 1000; n++) for (let i = 0; i < 5; i++) f.frame(n % 2 ? speaker : other, Buffer.from([i]));
+  for (let n = 0; n < 1000; n++) for (let i = 0; i < 5; i++) f.add(n % 2 ? speaker : other, Buffer.from([i]));
   assert.equal(f.posting, posting, "one loop drains them all");
   assert.equal(f.waiting.length, 100);
   for (let n = 0; n < 200 && answers.length; n++) {

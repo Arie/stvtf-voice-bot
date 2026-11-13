@@ -15,7 +15,7 @@ export class Who {
   }
 
   /** @param {string} discord A Discord user id. @returns {Promise<string | null>} `[U:1:N]`, or null. */
-  steamid(discord) {
+  lookup(discord) {
     const k = this.known.get(discord);
     if (k && (k.steamid || this.o.now() - k.at < ASK_AGAIN_MS)) return Promise.resolve(k.steamid);
     // One question at a time about someone: every frame of theirs asks.

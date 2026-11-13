@@ -3,15 +3,18 @@
 
 const LOCAL = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
 
+/** A host's origin: a local one over plain http. @param {string} host */
+export const originOf = host => `${LOCAL.test(host) ? "http" : "https"}://${host}`;
+
 // The first host: where people link their Steam account, and so where who they are is asked,
 // whichever region a match is on.
 /** @param {string[]} hosts */
-export const homeOf = hosts => `${LOCAL.test(hosts[0]) ? "http" : "https"}://${hosts[0]}`;
+export const homeOf = hosts => originOf(hosts[0]);
 
 /**
  * @param {string} link A match (`/w/<id>/`) or room (`/r/<id>/`) page on stv.tf, with or without `https://`.
  * @param {string[]} hosts The hosts voice may go to; `localhost` ones also over plain http.
- * @returns {{ voice: string; who: string; page: string; invite: string | null } | null}
+ * @returns {{ voice: string; whoUrl: string; page: string; invite: string | null } | null}
  */
 export function matchOf(link, hosts) {
   let url;
@@ -31,7 +34,7 @@ export function matchOf(link, hosts) {
   const invite = url.searchParams.get("voice");
   return {
     voice: `${page}voice`,
-    who: `${homeOf(hosts)}/voice/who`,
+    whoUrl: `${homeOf(hosts)}/voice/who`,
     page,
     invite: invite && /^[0-9a-f]{8,64}$/.test(invite) ? invite : null,
   };

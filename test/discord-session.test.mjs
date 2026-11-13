@@ -36,7 +36,7 @@ function world() {
     match: { voice: "https://stv.tf/w/m/voice", page: "https://stv.tf/w/m/", invite: "inv" },
     delay: 90,
     key: "k",
-    who: { peek: () => null, steamid: async () => null },
+    who: { peek: () => null, lookup: async () => null },
     onGone: why => void gone.push(why),
     fetch,
     voice: { joinVoiceChannel: stand(() => connection), entersState: stand(async () => {}) },

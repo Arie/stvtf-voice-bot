@@ -12,8 +12,8 @@ test("a linked Discord user is their SteamID, asked once", async () => {
     return { status: 200, ok: true, json: async () => ({ steamid: "[U:1:5]" }) };
   });
   const who = new Who({ url: "https://stv.tf/voice/who", key: "k", fetch });
-  assert.equal(await who.steamid("42"), "[U:1:5]");
-  assert.equal(await who.steamid("42"), "[U:1:5]");
+  assert.equal(await who.lookup("42"), "[U:1:5]");
+  assert.equal(await who.lookup("42"), "[U:1:5]");
   assert.equal(asked, 1);
 });
 
@@ -27,15 +27,15 @@ test("an unlinked user is asked about again in a while, as is everyone when the 
     return { status, ok: status === 200, json: async () => ({ steamid: "[U:1:9]" }) };
   });
   const who = new Who({ url: "u", key: "k", fetch, now: () => now });
-  assert.equal(await who.steamid("7"), null);
-  assert.equal(await who.steamid("7"), null);
+  assert.equal(await who.lookup("7"), null);
+  assert.equal(await who.lookup("7"), null);
   assert.equal(asked, 1, "not on every frame");
   now += 61_000;
   status = 0;
-  assert.equal(await who.steamid("7"), null, "down: unlinked for now");
+  assert.equal(await who.lookup("7"), null, "down: unlinked for now");
   now += 61_000;
   status = 200;
-  assert.equal(await who.steamid("7"), "[U:1:9]", "linked since");
+  assert.equal(await who.lookup("7"), "[U:1:9]", "linked since");
 });
 
 test("asked about by many frames at once, the site is asked once", async () => {
@@ -47,7 +47,7 @@ test("asked about by many frames at once, the site is asked once", async () => {
     return new Promise(r => (answer = r));
   };
   const who = new Who({ url: "u", key: "k", fetch });
-  const all = [who.steamid("7"), who.steamid("7"), who.steamid("7")];
+  const all = [who.lookup("7"), who.lookup("7"), who.lookup("7")];
   answer({ status: 200, ok: true, json: async () => ({ steamid: "[U:1:9]" }) });
   assert.deepEqual(await Promise.all(all), ["[U:1:9]", "[U:1:9]", "[U:1:9]"]);
   assert.equal(asked, 1);

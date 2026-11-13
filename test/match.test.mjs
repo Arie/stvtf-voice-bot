@@ -7,7 +7,7 @@ const hosts = ["stv.tf", "na.stv.tf"];
 test("a match or room link on a known stv.tf names where voice goes", () => {
   assert.deepEqual(matchOf("https://stv.tf/w/938502c33a83e5e5b9112d801cf6dd8f/", hosts), {
     voice: "https://stv.tf/w/938502c33a83e5e5b9112d801cf6dd8f/voice",
-    who: "https://stv.tf/voice/who",
+    whoUrl: "https://stv.tf/voice/who",
     page: "https://stv.tf/w/938502c33a83e5e5b9112d801cf6dd8f/",
     invite: null,
   });
@@ -40,7 +40,7 @@ test("the key never goes anywhere else", () => {
 test("who someone is, is asked of the first host, whichever region the match is on", () => {
   assert.equal(homeOf(["stv.tf", "na.stv.tf"]), "https://stv.tf");
   assert.equal(homeOf(["localhost:8090", "stv.tf"]), "http://localhost:8090");
-  assert.equal(matchOf("na.stv.tf/w/abc/", ["stv.tf", "na.stv.tf"])?.who, "https://stv.tf/voice/who");
+  assert.equal(matchOf("na.stv.tf/w/abc/", ["stv.tf", "na.stv.tf"])?.whoUrl, "https://stv.tf/voice/who");
 });
 
 test("a local link without http is plain http: a local stv.tf has no https", () => {

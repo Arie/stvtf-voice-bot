@@ -192,6 +192,6 @@ class MumbleSession {
     let packer = this.packers.get(v.session);
     if (!packer) this.packers.set(v.session, (packer = new Repacker20ms()));
     const who = { steamid: null, id: this.#idOf(v), name: v.name };
-    for (const opus of [...packer.push(v.opus), ...(v.last ? packer.flush() : [])]) this.forwarder.frame(who, opus);
+    for (const opus of [...packer.push(v.opus), ...(v.last ? packer.flush() : [])]) this.forwarder.add(who, opus);
   }
 }
