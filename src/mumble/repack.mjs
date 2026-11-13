@@ -39,24 +39,35 @@ function framesOfCode3(p) {
   const [vbr, padded, count] = [(p[1] & 0x80) !== 0, (p[1] & 0x40) !== 0, p[1] & 0x3f];
   const pad = padded ? paddingOf(p) : { at: 2, pad: 0 };
   if (!pad) return [];
-  let at = pad.at;
   const end = p.length - pad.pad;
-  if (!count || end < at) return [];
+  if (!count || end < pad.at) return [];
+  const sized = vbr ? vbrLengths(p, pad.at, end, count) : cbrLengths(pad.at, end, count);
+  if (!sized || sized.lengths.some(l => l < 0)) return [];
+  let at = sized.at;
+  return sized.lengths.map(l => p.subarray(at, (at += l)));
+}
+
+/**
+ * Frames of lengths given before them, the last's what is left.
+ * @param {Buffer} p @param {number} at @param {number} end @param {number} count
+ * @returns {{ lengths: number[]; at: number } | null} Them, and where the frames start.
+ */
+function vbrLengths(p, at, end, count) {
   const lengths = [];
-  if (vbr) {
-    for (let i = 0; i < count - 1; i++) {
-      const l = readLength(p, at);
-      if (!l) return [];
-      lengths.push(l[0]);
-      at = l[1];
-    }
-    lengths.push(end - at - lengths.reduce((a, b) => a + b, 0));
-  } else {
-    if ((end - at) % count) return [];
-    for (let i = 0; i < count; i++) lengths.push((end - at) / count);
+  for (let i = 0; i < count - 1; i++) {
+    const l = readLength(p, at);
+    if (!l) return null;
+    lengths.push(l[0]);
+    at = l[1];
   }
-  if (lengths.some(l => l < 0)) return [];
-  return lengths.map(l => p.subarray(at, (at += l)));
+  lengths.push(end - at - lengths.reduce((a, b) => a + b, 0));
+  return { lengths, at };
+}
+
+/** Frames of one length. @param {number} at @param {number} end @param {number} count */
+function cbrLengths(at, end, count) {
+  if ((end - at) % count) return null;
+  return { lengths: Array(count).fill((end - at) / count), at };
 }
 
 /**

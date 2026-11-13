@@ -89,34 +89,43 @@ export class Forwarder {
   async #post() {
     const b = this.waiting.shift();
     if (!b || this.stopped) return;
-    const { steamid, id, name } = b.speaker;
     this.inFlight = true;
     try {
-      const r = await this.fetch(this.url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(POST_MS),
-        redirect: "error",
-        body: JSON.stringify({
-          invite: this.invite,
-          steamid,
-          discord: id,
-          name,
-          channel: this.channel,
-          frames: b.frames,
-          delay: this.delay,
-        }),
-      });
-      if (r.status === 404) return this.#stop("match ended");
-      if (r.status === 401) return this.#stop("key refused");
-      if (r.status === 403) return this.#stop("invite expired");
-      if (r.ok) this.sent += b.frames.length;
-      this.onAnswer(`${r.status} ${await r.text()}`);
+      await this.#answered(await this.fetch(this.url, this.#request(b)), b.frames.length);
     } catch (e) {
       this.onAnswer(`post failed: ${/** @type {Error} */ (e).message}`);
     } finally {
       this.inFlight = false;
     }
+  }
+
+  /** @param {{ speaker: Speaker; frames: string[] }} b */
+  #request(b) {
+    const { steamid, id, name } = b.speaker;
+    return {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(POST_MS),
+      redirect: /** @type {const} */ ("error"),
+      body: JSON.stringify({
+        invite: this.invite,
+        steamid,
+        discord: id,
+        name,
+        channel: this.channel,
+        frames: b.frames,
+        delay: this.delay,
+      }),
+    };
+  }
+
+  /** What stv.tf answered a post of `frames`: gone, refused, or how it went. @param {Response} r @param {number} frames */
+  async #answered(r, frames) {
+    if (r.status === 404) return this.#stop("match ended");
+    if (r.status === 401) return this.#stop("key refused");
+    if (r.status === 403) return this.#stop("invite expired");
+    if (r.ok) this.sent += frames;
+    this.onAnswer(`${r.status} ${await r.text()}`);
   }
 
   /** @param {string} why */
