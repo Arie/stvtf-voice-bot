@@ -38,8 +38,11 @@ const job = (over = {}) => ({
   ...over,
 });
 
-/** A session on a made-up server, posting to a made-up stv.tf. @param {Record<string, unknown>} [over] */
-function session(over = {}) {
+/**
+ * A session on a made-up server, posting to a made-up stv.tf.
+ * @param {Record<string, unknown>} [over] @param {Partial<import("../src/mumble/session.mjs").Options>} [options]
+ */
+function session(over = {}, options = {}) {
   /** @type {Server[]} */
   const servers = [];
   /** @type {{ frames: string[] }[]} */
@@ -58,6 +61,7 @@ function session(over = {}) {
     fetch: fetchOf(
       async (url, init) => (posts.push(JSON.parse(init.body)), { ok: true, status: 200, text: async () => "ok" }),
     ),
+    ...options,
   });
   return { s, servers, posts, statuses, server: () => /** @type {Server} */ (servers.at(-1)) };
 }
@@ -149,4 +153,14 @@ test("each match's channel has a name of its own on a server, with no space in i
   assert.equal(nameOf({ ...one, slot: 1 }), "stv.tf-5d4f1b");
   assert.equal(nameOf({ ...one, slot: 2 }), "stv.tf-5d4f1b-2");
   assert.notEqual(nameOf(one), nameOf({ ...one, match: "aaaaaa22ac95fbb47505b19a2c24b994" }));
+});
+
+test("a server on this network is joined only when the bot is told it may be", async () => {
+  const here = session({}, { lookup: lookupOf(["10.0.0.1"]) });
+  await until(() => here.statuses.length);
+  assert.deepEqual(here.statuses, ["Could not join: private address"]);
+  assert.equal(here.servers.length, 0);
+  const lan = session({}, { lookup: lookupOf(["10.0.0.1"]), anywhere: true });
+  await until(() => lan.servers.length);
+  await lan.s.leave("done");
 });

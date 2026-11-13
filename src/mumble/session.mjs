@@ -15,7 +15,7 @@ const IN_USE = 5,
   NAMES = 3;
 /** @typedef {(text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
- * @typedef {{ key: string; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
+ * @typedef {{ key: string; anywhere?: boolean; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void> }} Options `lookup`, `connect`, `fetch` and `pause` are for tests.
  */
 
@@ -105,7 +105,7 @@ class MumbleSession {
   async #start() {
     const { job } = this;
     try {
-      this.address = await addressOf(job.host, { lookup: this.o.lookup });
+      this.address = await addressOf(job.host, { lookup: this.o.lookup, anywhere: this.o.anywhere });
       const client = await this.#join();
       if (!client) return;
       if (this.gone) return void client.leave("disconnected");

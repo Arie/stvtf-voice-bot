@@ -1,23 +1,21 @@
 // The stv.tf voice bot: it sits in a team's voice channel, in Discord (src/discord) or Mumble
-// (src/mumble), says it is recording, and passes what is said to a match on stv.tf.
-//
-// Environment: DISCORD_TOKEN; STVTF_VOICE_KEY (the key stv.tf takes voice with); STVTF_HOSTS (the
-// stv.tf hosts voice may go to, comma separated; default the four regions); STVTF_MUMBLE_ANYWHERE=1
-// (a Mumble server may be on this machine or its network: for trying out, and at a LAN).
+// (src/mumble), says it is recording, and passes what is said to a match on stv.tf. Its settings
+// are in src/config.mjs.
+import { config } from "./config.mjs";
 import { startDiscord } from "./discord/bot.mjs";
 import { startMumble } from "./mumble/bot.mjs";
 
-const hosts = (process.env.STVTF_HOSTS ?? "stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf").split(",").map(h => h.trim());
-const key = process.env.STVTF_VOICE_KEY ?? "";
-const token = process.env.DISCORD_TOKEN ?? "";
-
-if (!token || !key) {
-  console.error("stvtf-voice-bot: set DISCORD_TOKEN and STVTF_VOICE_KEY");
+let settings;
+try {
+  settings = config(process.env);
+} catch (e) {
+  console.error(`stvtf-voice-bot: ${/** @type {Error} */ (e).message}`);
   process.exit(2);
 }
+const { hosts, key, token, anywhere } = settings;
 
 const discord = startDiscord({ hosts, key, token });
-const mumble = startMumble({ hosts, key });
+const mumble = startMumble({ hosts, key, anywhere });
 
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {

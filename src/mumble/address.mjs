@@ -54,17 +54,15 @@ export function isPublic(ip) {
   return !INSIDE.check(ip, "ipv6");
 }
 
-// A server on this machine or its network is joined only when said so (for trying it out).
-const ANYWHERE = process.env.STVTF_MUMBLE_ANYWHERE === "1";
-
 /** @typedef {(host: string, o: { all: true }) => Promise<{ address: string }[]>} Lookup */
 
 /**
  * Where to reach `host`: one of its addresses, once every one is known to be out on the internet
- * (a name can give one public and one private, and a second lookup another).
+ * (a name can give one public and one private, and a second lookup another); with `anywhere`,
+ * any (for trying out, and at a LAN).
  * @param {string} host @param {{ lookup?: Lookup; anywhere?: boolean }} [o]
  */
-export async function addressOf(host, { lookup = dns.lookup, anywhere = ANYWHERE } = {}) {
+export async function addressOf(host, { lookup = dns.lookup, anywhere = false } = {}) {
   const all = await lookup(host, { all: true });
   if (!all.length) throw new Error("no address");
   if (!anywhere && !all.every(a => isPublic(a.address))) throw new Error("private address");
