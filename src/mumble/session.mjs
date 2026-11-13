@@ -16,7 +16,7 @@ const FLUSH_MS = 100,
  * not share one. Hyphens join its parts: most servers allow no space in a name.
  * @param {import("./jobs.mjs").Job} job
  */
-export const nameOf = job => `stv.tf-${job.match.slice(0, 6)}${(job.job ?? 1) > 1 ? `-${job.job}` : ""}`;
+export const nameOf = job => `stv.tf-${job.match.slice(0, 6)}${(job.slot ?? 1) > 1 ? `-${job.slot}` : ""}`;
 
 // What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
 const IN_USE = 5,

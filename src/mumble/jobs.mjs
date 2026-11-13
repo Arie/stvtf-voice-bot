@@ -11,15 +11,19 @@ const ASK_MS = 40_000,
   // A stv.tf that will not have the key: a wrong one stays wrong.
   REFUSED_MS = 60_000;
 
-/** @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; job?: number; voice: string; page: string }} Job */
+/**
+ * A channel wanted, as stv.tf sends it: `job` says which of the match's channels it is.
+ * @typedef {{ match: string; invite: string; host: string; port: number; password: string; channel: string; delay: number; asked?: number; job?: number }} Wanted
+ */
+/** A channel wanted, with where its voice goes; `slot` is the wire's `job`. @typedef {Omit<Wanted, "job"> & { slot?: number; voice: string; page: string }} Job */
 /** @typedef {{ delay: number; leave: (why: string) => Promise<void> | void }} Session */
 /**
  * A job seen to: its session, once started (after the one before it in that match has closed).
- * @typedef {{ same: string; job: Job; session: Session | null; left: boolean; ready: Promise<void> }} Entry
+ * @typedef {{ connectionKey: string; job: Job; session: Session | null; left: boolean; ready: Promise<void> }} Entry
  */
 
 /** An IPv6 address (as net.isIPv6 takes it) as its 16 bytes. @param {string} ip */
-function bytes6(ip) {
+function ipv6Bytes(ip) {
   // One that ends in IPv4's form: those four bytes as two groups.
   const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
   const [a, b, c, d] = v4 ? v4.slice(1).map(Number) : [];
@@ -63,7 +67,7 @@ for (const [ip, bits] of /** @type {[string, number][]} */ ([
 export function isPublic(ip) {
   if (net.isIPv4(ip)) return !INSIDE.check(ip, "ipv4");
   if (!net.isIPv6(ip)) return false;
-  const x = bytes6(ip);
+  const x = ipv6Bytes(ip);
   // IPv4 in IPv6 (mapped, or the old compatible form, :: and ::1 among them): as that address.
   if (x.slice(0, 10).every(n => n === 0)) return x[10] === 255 && x[11] === 255 && isPublic(x.slice(12).join("."));
   return !INSIDE.check(ip, "ipv6");
@@ -72,20 +76,20 @@ export function isPublic(ip) {
 /** The channel a job's voice is said to come from, to stv.tf. @param {Job} j */
 export const channelOf = j => `mumble:${j.host}:${j.channel.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 60)}`;
 
-/** Whether stv.tf's answer holds a job the bot can do. @param {unknown} j @returns {j is Job} */
-const whole = j => {
+/** Whether stv.tf's answer holds a job the bot can do. @param {unknown} j @returns {j is Wanted} */
+const isJob = j => {
   if (j === null || typeof j !== "object") return false;
   const o = /** @type {Record<string, unknown>} */ (j);
   return ["match", "host", "channel"].every(k => typeof o[k] === "string" && o[k]) && Number.isInteger(o.port);
 };
 
 /** Which of what is wanted a job is: its match, and which of that match's channels. @param {Job} j */
-const keyOf = j => `${j.match}#${j.job ?? ""}`;
+const keyOf = j => `${j.match}#${j.slot ?? ""}`;
 
 /** What makes a job another one: all but its delay. @param {Job} j */
-const same = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
+const connectionKeyOf = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
 
-export class Jobs {
+export class JobPoller {
   /**
    * @param {{
    *   origin: string; key: string; fetch?: typeof fetch;
@@ -107,17 +111,17 @@ export class Jobs {
   }
 
   /** Asks what is wanted (waiting for a change, once it knows how things stand) and sees to it. */
-  async once() {
+  async poll() {
     const jobs = await this.#ask();
     if (!jobs) return false;
     for (const [key, had] of this.sessions) {
       const now = jobs.find(j => keyOf(j) === key);
-      if (now && same(now) === had.same) continue;
+      if (now && connectionKeyOf(now) === had.connectionKey) continue;
       this.#leave(key, had, now ? "moved" : "disconnected");
     }
     for (const job of jobs) {
       const had = this.sessions.get(keyOf(job));
-      if (!had) this.#begin(job);
+      if (!had) this.#startJob(job);
       else {
         had.job.delay = job.delay;
         if (had.session) had.session.delay = job.delay;
@@ -146,26 +150,27 @@ export class Jobs {
     const { jobs = [], version } = /** @type {{ jobs?: unknown; version?: unknown }} */ (wanted ?? {});
     if (wanted === null || typeof wanted !== "object" || !Array.isArray(jobs)) return null;
     this.version = Number(version) || 0;
-    return jobs.filter(whole).map(j => ({
+    return jobs.filter(isJob).map(({ job: slot, ...j }) => ({
       ...j,
+      slot,
       page: `${this.o.origin}/w/${j.match}/`,
       voice: `${this.o.origin}/w/${j.match}/voice`,
     }));
   }
 
   /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
-  #begin(job) {
+  #startJob(job) {
     /** @type {(text: string, people?: { id: string; name: string }[]) => void} */
     const onStatus = (text, people) =>
       void this.statusPosts.push(
         postStatus(
           { page: job.page, key: this.o.key, invite: job.invite, fetch: this.o.fetch },
-          { kind: "mumble", status: text, people, asked: job.asked, job: job.job, channel: channelOf(job) },
+          { kind: "mumble", status: text, people, asked: job.asked, job: job.slot, channel: channelOf(job) },
         ),
       );
     /** @type {Entry} */
-    const entry = { same: same(job), job, session: null, left: false, ready: Promise.resolve() };
-    const begin = () => {
+    const entry = { connectionKey: connectionKeyOf(job), job, session: null, left: false, ready: Promise.resolve() };
+    const start = () => {
       if (entry.left) return;
       // One that would not be joined is not tried again until it is asked for anew.
       try {
@@ -176,8 +181,8 @@ export class Jobs {
     };
     // The one before signs in by the same name: this one goes in once it is out.
     const before = this.closing.get(keyOf(job));
-    if (before) entry.ready = before.then(begin);
-    else begin();
+    if (before) entry.ready = before.then(start);
+    else start();
     this.sessions.set(keyOf(job), entry);
   }
 
@@ -189,7 +194,7 @@ export class Jobs {
   /** Keeps asking until stopped. */
   async run() {
     while (!this.stopped)
-      if (!(await this.once().catch(() => false))) await new Promise(r => setTimeout(r, this.retryIn()));
+      if (!(await this.poll().catch(() => false))) await new Promise(r => setTimeout(r, this.retryIn()));
   }
 
   /** @param {string} key Which it is (`keyOf`). @param {Entry} had @param {string} why */

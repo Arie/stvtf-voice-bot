@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Jobs, isPublic } from "../src/mumble/jobs.mjs";
+import { JobPoller, isPublic } from "../src/mumble/jobs.mjs";
 import { fetchOf } from "./stand.mjs";
 
 /** @typedef {import("../src/mumble/jobs.mjs").Job} Job */
@@ -50,8 +50,8 @@ function world() {
 
 test("a channel wanted is joined, with where its voice goes, and the page is told how it goes", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
   assert.equal(w.started.length, 1);
   assert.deepEqual(
     [w.started[0].job.voice, w.started[0].job.host, w.started[0].job.channel, w.started[0].job.invite],
@@ -68,20 +68,20 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
     },
   ]);
   // Asked again, with what it has: nothing new, nothing done.
-  await jobs.once();
+  await poller.poll();
   assert.equal(w.started.length, 1);
 });
 
 test("one no longer wanted is left; one wanted elsewhere is left and joined anew; a new delay is taken", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
   w.wanted = [job({ delay: 0 })];
-  await jobs.once();
+  await poller.poll();
   assert.equal(w.started[0].delay, 0, "the same channel: only the delay");
   assert.equal(w.started.length, 1);
   w.wanted = [job({ channel: "Team B" })];
-  await jobs.once();
+  await poller.poll();
   await tick();
   assert.deepEqual(
     w.left.map(l => l.slice(0, 2)),
@@ -89,7 +89,7 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
   );
   assert.equal(w.started.at(-1)?.job.channel, "Team B");
   w.wanted = [];
-  await jobs.once();
+  await poller.poll();
   assert.deepEqual(
     w.left.map(l => l[1]),
     ["Team A", "Team B"],
@@ -98,10 +98,10 @@ test("one no longer wanted is left; one wanted elsewhere is left and joined anew
 
 test("stv.tf not answering sends nobody away", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
   w.down = true;
-  await jobs.once();
+  await poller.poll();
   assert.equal(w.left.length, 0);
 });
 
@@ -112,9 +112,9 @@ test("a server that cannot be joined is said so, and not tried over and over", a
     onStatus("Could not join: the server refused me: Wrong server password");
     return null;
   };
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
+  await poller.poll();
   assert.equal(w.started.length, 1);
   assert.match(w.told[0].status ?? "", /Wrong server password/);
 });
@@ -139,11 +139,11 @@ test("only servers out on the internet are joined", () => {
 
 test("the same channel asked for anew is left and joined again", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
   w.wanted = [job({ asked: 1 })];
-  await jobs.once();
+  await poller.poll();
   w.wanted = [job({ asked: 2 })];
-  await jobs.once();
+  await poller.poll();
   await tick();
   assert.deepEqual(
     w.left.map(l => l.slice(0, 2)),
@@ -178,8 +178,8 @@ test("whatever stv.tf answers, it keeps asking", async () => {
     // As the real one does with a job of no channel.
     /** @type {World["start"]} */
     const start = (j, onStatus) => (j.channel.replace(/x/, ""), w.start(j, onStatus));
-    const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
-    await jobs.once();
+    const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start });
+    await poller.poll();
   }
 });
 
@@ -196,13 +196,13 @@ test("a channel joined anew waits for the old connection to close (both sign in 
     };
     return s;
   };
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
   w.wanted = [job({ channel: "Team B" })];
-  await jobs.once();
+  await poller.poll();
   assert.equal(w.started.length, 1, "not while the old one is still connected");
   w.wanted = [job({ channel: "Team B", delay: 5 })];
-  await jobs.once();
+  await poller.poll();
   closed();
   await new Promise(r => setImmediate(r));
   assert.deepEqual(
@@ -217,29 +217,29 @@ test("a channel joined anew waits for the old connection to close (both sign in 
 test("what the page is told says which ask, and which channel, it is of", async () => {
   const w = world();
   w.wanted = [job({ asked: 3, channel: "Team A/1" })];
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
-  await jobs.once();
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  await poller.poll();
   assert.deepEqual([w.told[0].asked, w.told[0].channel], [3, "mumble:mumble.example:Team_A_1"]);
 });
 
 test("a stv.tf that refuses the key is asked again much later than one that is down", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
   w.down = true;
-  await jobs.once();
-  const down = jobs.retryIn();
+  await poller.poll();
+  const down = poller.retryIn();
   w.down = false;
   w.fetch = fetchOf(async () => ({ ok: false, status: 401 }));
-  const refused = new Jobs({ origin: "https://stv.tf", key: "wrong", fetch: w.fetch, start: w.start });
-  await refused.once();
+  const refused = new JobPoller({ origin: "https://stv.tf", key: "wrong", fetch: w.fetch, start: w.start });
+  await refused.poll();
   assert.ok(refused.retryIn() >= 20 * down, `${refused.retryIn()} against ${down}`);
 });
 
 test("two channels wanted for one match are each sat in, and each left by itself", async () => {
   const w = world();
-  const jobs = new Jobs({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
+  const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start: w.start });
   w.wanted = [job({ job: 1, channel: "Red" }), job({ job: 2, channel: "Blu" })];
-  await jobs.once();
+  await poller.poll();
   assert.deepEqual(
     w.started.map(s => s.job.channel),
     ["Red", "Blu"],
@@ -250,7 +250,7 @@ test("two channels wanted for one match are each sat in, and each left by itself
     "stv.tf is told which of the two each word is of",
   );
   w.wanted = [job({ job: 2, channel: "Blu" })];
-  await jobs.once();
+  await poller.poll();
   await tick();
   assert.deepEqual(
     w.left.map(l => l[1]),

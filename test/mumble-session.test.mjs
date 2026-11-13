@@ -164,7 +164,7 @@ test("each match's channel has a name of its own on a server, with no space in i
     page: "",
   };
   assert.equal(nameOf(one), "stv.tf-5d4f1b");
-  assert.equal(nameOf({ ...one, job: 1 }), "stv.tf-5d4f1b");
-  assert.equal(nameOf({ ...one, job: 2 }), "stv.tf-5d4f1b-2");
+  assert.equal(nameOf({ ...one, slot: 1 }), "stv.tf-5d4f1b");
+  assert.equal(nameOf({ ...one, slot: 2 }), "stv.tf-5d4f1b-2");
   assert.notEqual(nameOf(one), nameOf({ ...one, match: "aaaaaa22ac95fbb47505b19a2c24b994" }));
 });

@@ -1,7 +1,7 @@
 // The bot in Mumble: every stv.tf says which channels it wants the bot in (asked for on a match's
 // page), and the bot sits in each, marked as recording, passing what is said to that match.
 import { homeOf } from "../match.mjs";
-import { Jobs } from "./jobs.mjs";
+import { JobPoller } from "./jobs.mjs";
 import { startSession } from "./session.mjs";
 
 /**
@@ -11,9 +11,10 @@ import { startSession } from "./session.mjs";
  * @returns {{ stop: (why: string) => Promise<unknown> }}
  */
 export function startMumble({ hosts, key }) {
-  const all = hosts.map(
-    host => new Jobs({ origin: homeOf([host]), key, start: (job, onStatus) => startSession(job, onStatus, { key }) }),
+  const pollers = hosts.map(
+    host =>
+      new JobPoller({ origin: homeOf([host]), key, start: (job, onStatus) => startSession(job, onStatus, { key }) }),
   );
-  for (const jobs of all) jobs.run();
-  return { stop: why => Promise.all(all.map(jobs => jobs.stop(why))) };
+  for (const poller of pollers) poller.run();
+  return { stop: why => Promise.all(pollers.map(poller => poller.stop(why))) };
 }
