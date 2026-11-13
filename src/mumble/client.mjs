@@ -45,6 +45,15 @@ export const tlsOptions = o => ({
 });
 
 export class MumbleClient {
+  /** @type {(() => void) | null} Set while it waits for the server to move it to its channel. */
+  #onMovedIn = null;
+  /** Ends join() once in the channel, or with why not. */
+  #resolveJoin = () => {};
+  /** @type {(why: string, type?: number) => void} */
+  #rejectJoin = () => {};
+  /** @type {() => void} */
+  #markClosed = () => {};
+
   /**
    * @param {{
    *   host: string; address?: string; port?: number; username: string; password?: string; channel: string;
@@ -63,18 +72,10 @@ export class MumbleClient {
     this.session = -1;
     this.channel = -1;
     /** Whether the server has it in its channel: only then is voice taken. */
-    this.in = false;
-    /** @type {(() => void) | null} Called once the server has moved it there. */
-    this.moved = null;
-    /** Called once in the channel, and with why not; set by join(). */
-    this.joined = () => {};
-    /** @type {(why: string, type?: number) => void} */
-    this.fail = () => {};
+    this.inChannel = false;
     this.gone = false;
-    /** @type {() => void} */
-    this.wasClosed = () => {};
     /** Resolves once the connection is closed (or none was made). @type {Promise<void>} */
-    this.closed = new Promise(r => (this.wasClosed = r));
+    this.closed = new Promise(r => (this.#markClosed = r));
   }
 
   /**
@@ -100,20 +101,20 @@ export class MumbleClient {
       };
       const timer = setTimeout(() => fail("timed out"), JOIN_MS).unref();
       const done = () => clearTimeout(timer);
-      this.joined = () => (done(), resolve(undefined));
-      this.fail = (why, type) => (done(), fail(why, type));
+      this.#resolveJoin = () => (done(), resolve(undefined));
+      this.#rejectJoin = (why, type) => (done(), fail(why, type));
       this.socket = connect();
       const frames = new Frames();
       this.socket.on("data", chunk => {
         try {
-          for (const m of frames.push(chunk)) this.#got(m.type, m.body);
+          for (const m of frames.push(chunk)) this.#onMessage(m.type, m.body);
         } catch (e) {
           done();
           fail("bad reply");
         }
       });
       this.socket.on("error", e => (done(), fail(`connection failed (${e.message})`)));
-      this.socket.on("close", () => (done(), fail("connection closed"), this.wasClosed()));
+      this.socket.on("close", () => (done(), fail("connection closed"), this.#markClosed()));
       this.#send("Version", { version_v1: VERSION, release: "stv.tf voice bot", os: "bot" });
       this.#send("Authenticate", { username: o.username, password: o.password, opus: true, client_type: BOT });
       this.stopPings = every(() => this.#send("Ping", { timestamp: Date.now() }), PING_MS);
@@ -126,12 +127,12 @@ export class MumbleClient {
   }
 
   /** @param {string} type @param {Buffer} body */
-  #got(type, body) {
+  #onMessage(type, body) {
     if (type === "UDPTunnel") return this.#voice(body);
     const m = decode(type, body);
     switch (type) {
       case "Reject":
-        return this.fail(m.reason ?? "refused", m.type);
+        return this.#rejectJoin(m.reason ?? "refused", m.type);
       case "ChannelState":
         return this.#channelState(m);
       case "ChannelRemove":
@@ -143,7 +144,7 @@ export class MumbleClient {
       case "ServerSync":
         return this.#serverSync(m);
       case "PermissionDenied":
-        return this.#denied(m);
+        return this.#permissionDenied(m);
       case "TextMessage":
         return this.o.onText?.(this.users.get(m.actor), String(m.message ?? ""));
     }
@@ -154,7 +155,7 @@ export class MumbleClient {
     const v = parseVoice(body);
     const who = v && this.users.get(v.session);
     // Talk to the channel only, from someone in it; never a whisper.
-    if (v && who && this.in && v.target === 0 && who.channel === this.channel && v.session !== this.session)
+    if (v && who && this.inChannel && v.target === 0 && who.channel === this.channel && v.session !== this.session)
       this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
   }
 
@@ -162,13 +163,13 @@ export class MumbleClient {
   #channelState(m) {
     if (m.name == null) return;
     if (!this.channels.has(m.channel_id ?? 0) && this.channels.size >= MAX_CHANNELS)
-      return this.fail("too many channels");
+      return this.#rejectJoin("too many channels");
     this.channels.set(m.channel_id ?? 0, m.name.slice(0, MAX_NAME));
   }
 
   /** @param {Record<string, any>} m */
   #userState(m) {
-    if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return this.fail("too many users");
+    if (!this.users.has(m.session) && this.users.size >= MAX_USERS) return this.#rejectJoin("too many users");
     const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
     if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
     if (m.channel_id != null) u.channel = m.channel_id;
@@ -178,11 +179,11 @@ export class MumbleClient {
     else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
     this.users.set(m.session, u);
     if (m.session !== this.session) return;
-    if (this.moved && u.channel === this.channel) {
-      this.in = true;
-      this.moved();
-      this.moved = null;
-    } else if (this.in && u.channel !== this.channel) this.#end("moved");
+    if (this.#onMovedIn && u.channel === this.channel) {
+      this.inChannel = true;
+      this.#onMovedIn();
+      this.#onMovedIn = null;
+    } else if (this.inChannel && u.channel !== this.channel) this.#end("moved");
   }
 
   /** @param {Record<string, any>} m */
@@ -192,8 +193,8 @@ export class MumbleClient {
   }
 
   /** Refused something: the move to its channel, or something said. @param {Record<string, any>} m */
-  #denied(m) {
-    if (this.moved) return this.fail("move refused");
+  #permissionDenied(m) {
+    if (this.#onMovedIn) return this.#rejectJoin("move refused");
     this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
   }
 
@@ -202,7 +203,7 @@ export class MumbleClient {
     this.session = m.session;
     const want = this.o.channel.trim().toLowerCase();
     const found = [...this.channels].find(([, name]) => name.toLowerCase() === want);
-    if (!found) return this.fail(`no channel "${this.o.channel}"`);
+    if (!found) return this.#rejectJoin(`no channel "${this.o.channel}"`);
     this.channel = found[0];
     // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
     // the server says it is there.
@@ -213,9 +214,9 @@ export class MumbleClient {
       self_mute: true,
       recording: true,
     });
-    if (!there) return void (this.moved = this.joined);
-    this.in = true;
-    this.joined();
+    if (!there) return void (this.#onMovedIn = this.#resolveJoin);
+    this.inChannel = true;
+    this.#resolveJoin();
   }
 
   /** Those in the bot's channel, itself aside. @returns {Person[]} */
@@ -240,7 +241,7 @@ export class MumbleClient {
     this.gone = true;
     this.stopPings?.();
     this.socket?.destroy();
-    if (!this.socket) this.wasClosed();
+    if (!this.socket) this.#markClosed();
     this.o.onGone?.(why);
   }
 }

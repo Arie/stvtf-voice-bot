@@ -100,7 +100,7 @@ class MumbleSession {
     this.timers.forEach(clearInterval);
     this.forwarder.flush();
     this.closing = (async () => {
-      if (this.client?.in) {
+      if (this.client?.inChannel) {
         this.client.say(`Leaving: ${why}`);
         // The goodbye gets a moment to go out.
         await new Promise(r => setTimeout(r, 200));
@@ -176,7 +176,7 @@ class MumbleSession {
       onVoice: v => this.#voice(v),
       onGone: why => {
         // Only one that was in: a join that fails says so itself.
-        if (this.gone || !c.in) return;
+        if (this.gone || !c.inChannel) return;
         this.gone = true;
         this.timers.forEach(clearInterval);
         this.onStatus(`Left: ${why}`, []);
