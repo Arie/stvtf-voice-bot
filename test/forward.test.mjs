@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Forwarder } from "../src/forward.mjs";
 import { fetchOf, tick, unread } from "./stand.mjs";
 
-/** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number }} Body */
+/** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number; late: number }} Body */
 
 const speaker = { steamid: "[U:1:5]", id: "1", name: "a" };
 
@@ -83,13 +83,62 @@ test("a match that is gone, or a refused key, stops it and says why", async () =
   }
 });
 
-test("a hiccup (the stream not there yet, the site restarting) is waited out, not fatal", async () => {
-  const { posts, fetch } = fake(n => (n === 1 ? { status: 409, text: "no stream yet" } : { status: 200, text: "ok" }));
-  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });
+/** A clock that only waiting moves on: what a forwarder is given as `now` and `wait`. */
+function clock() {
+  const c = { t: 0, now: () => c.t, wait: async (/** @type {number} */ ms) => void (c.t += ms) };
+  return c;
+}
+
+test("a post that failed (the site away, restarting, no stream yet) goes again, in order, saying how long it waited", async () => {
+  const troubles = [
+    { status: 503, text: "restarting" },
+    { status: 409, text: "no stream yet" },
+  ];
+  const { posts, fetch } = fake(n => {
+    if (n === 1) throw new Error("connection refused");
+    return troubles[n - 2] ?? { status: 200, text: "ok" };
+  });
+  const { now, wait } = clock();
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, now, wait });
   for (let i = 0; i < 10; i++) f.add(speaker, Buffer.from([i]));
   await f.flush();
   assert.equal(f.stopped, false);
-  assert.equal(posts.length, 2, "the next batch still goes");
+  assert.deepEqual(
+    posts.map(p => [Buffer.from(p.body.frames[0], "base64")[0], p.body.late]),
+    [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [5, 3],
+    ],
+    "the first until it is taken, a second apart, then the next",
+  );
+  assert.equal(f.sent, 10);
+});
+
+test("stopped, a post that fails is not tried again, and what waits goes with it", async () => {
+  const { posts, fetch } = fake(() => ({ status: 503, text: "restarting" }));
+  const { now, wait } = clock();
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, now, wait });
+  for (let i = 0; i < 10; i++) f.add(speaker, Buffer.from([i]));
+  await f.stop();
+  assert.equal(posts.length, 1);
+  assert.equal(f.waiting.length, 0);
+});
+
+test("what waited longer than its delay is dropped: its moment on the stream is past", async () => {
+  let away = true;
+  const { posts, fetch } = fake(() => (away ? { status: 503, text: "" } : { status: 200, text: "ok" }));
+  const { now, wait } = clock();
+  const f = new Forwarder({ url: "u", key: "k", delay: 10, fetch, now, wait });
+  for (let i = 0; i < 5; i++) f.add(speaker, Buffer.from([i]));
+  await f.flush();
+  assert.equal(posts.length, 11, "tried for its 10 s");
+  away = false;
+  for (let i = 5; i < 10; i++) f.add(speaker, Buffer.from([i]));
+  await f.flush();
+  assert.deepEqual([posts.length, Buffer.from(posts[11].body.frames[0], "base64")[0], posts[11].body.late], [12, 5, 0]);
 });
 
 test("stopped, what is batched still goes, and no more is taken", async () => {

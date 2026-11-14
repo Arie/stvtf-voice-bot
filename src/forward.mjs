@@ -1,10 +1,15 @@
 // A channel's voice on its way to a match: each speaker's Opus frames batched five at a time
 // (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it
-// (what waits is dropped); anything else (no stream yet, the site restarting) is waited out.
+// (what waits is dropped). A post that fails for anything else (the site away or restarting, no
+// stream yet) goes again every second until it is taken, saying how long it waited, so stv.tf
+// holds it to the tick of when it was said; what waited longer than its delay is dropped.
 import { discard } from "./http.mjs";
 
 // `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
 /** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
+
+// A speaker's frames on their way, since `at` (ms).
+/** @typedef {{ speaker: Speaker; frames: string[]; at: number }} Waiting */
 
 // Frames in a post as they come, and at most when posts are slow (what waits of a speaker goes
 // as one); the most posts waiting before the oldest go; and how long a post may take.
@@ -12,10 +17,14 @@ const BATCH = 5,
   MAX_POST = 30,
   MAX_WAITING = 100,
   POST_MS = 3000;
+// How long a post that failed waits to go again; and the least a post may wait, whatever its
+// delay (commentary has none).
+const RETRY_MS = 1000,
+  MIN_KEPT_MS = 5000;
 
 export class Forwarder {
   /**
-   * @param {{ url: string; key: string; delay: number; channel?: string; invite?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onAnswer?: (answer: string) => void }} o
+   * @param {{ url: string; key: string; delay: number; channel?: string; invite?: string; fetch?: typeof fetch; onStop?: (why: string) => void; onAnswer?: (answer: string) => void; now?: () => number; wait?: (ms: number) => Promise<void> }} o
    */
   constructor(o) {
     this.url = o.url;
@@ -30,6 +39,9 @@ export class Forwarder {
     /** Told when it stops by itself: the match gone, the key or invite refused. */
     this.onStop = o.onStop ?? (() => {});
     this.onAnswer = o.onAnswer ?? (() => {});
+    /** The clock (ms), and a wait on it. */
+    this.now = o.now ?? Date.now;
+    this.wait = o.wait ?? (ms => new Promise(r => setTimeout(r, ms)));
     /** Whether it takes no more frames. */
     this.stopped = false;
     /** Whether a post is on its way: what comes meanwhile waits, a speaker's as one post. */
@@ -37,7 +49,7 @@ export class Forwarder {
     this.sent = 0;
     /** @type {Map<string, { speaker: Speaker; frames: string[] }>} */
     this.batches = new Map();
-    /** @type {{ speaker: Speaker; frames: string[] }[]} */
+    /** @type {Waiting[]} */
     this.waiting = [];
     /** Whether a loop is posting what waits. */
     this.draining = false;
@@ -72,7 +84,7 @@ export class Forwarder {
       last.frames.push(...b.frames);
       return;
     }
-    this.waiting.push(b);
+    this.waiting.push({ ...b, at: this.now() });
     while (this.waiting.length > MAX_WAITING) this.waiting.shift();
     if (this.draining) return;
     this.draining = true;
@@ -92,18 +104,34 @@ export class Forwarder {
   async #post() {
     const b = this.waiting.shift();
     if (!b) return;
+    const late = this.now() - b.at;
+    // Its moment on the stream is past.
+    if (late > Math.max(this.delay * 1000, MIN_KEPT_MS)) return;
     this.inFlight = true;
     try {
-      await this.#answered(await this.fetch(this.url, this.#request(b)), b.frames.length);
-    } catch (e) {
-      this.onAnswer(`post failed: ${/** @type {Error} */ (e).message}`);
+      if (await this.#taken(b, late / 1000)) return;
+      // Stopped, nothing is waited for: it goes, and the rest with it.
+      if (this.stopped) return void (this.waiting = []);
+      this.waiting.unshift(b);
+      while (this.waiting.length > MAX_WAITING) this.waiting.shift();
+      await this.wait(RETRY_MS);
     } finally {
       this.inFlight = false;
     }
   }
 
-  /** @param {{ speaker: Speaker; frames: string[] }} b */
-  #request(b) {
+  /** Posts `b`, said `late` seconds ago; whether that is the end of it: not to go again. @param {Waiting} b @param {number} late */
+  async #taken(b, late) {
+    try {
+      return await this.#answered(await this.fetch(this.url, this.#request(b, late)), b.frames.length);
+    } catch (e) {
+      this.onAnswer(`post failed: ${/** @type {Error} */ (e).message}`);
+      return false;
+    }
+  }
+
+  /** @param {Waiting} b @param {number} late */
+  #request(b, late) {
     const { steamid, id, name } = b.speaker;
     return {
       method: "POST",
@@ -118,19 +146,26 @@ export class Forwarder {
         channel: this.channel,
         frames: b.frames,
         delay: this.delay,
+        late,
       }),
     };
   }
 
-  /** What stv.tf answered a post of `frames`: gone, refused, or how it went. @param {Response} r @param {number} frames */
+  /**
+   * What stv.tf answered a post of `frames`: gone, refused, or how it went; whether that is the
+   * end of it (not so with no stream yet, or the site in trouble).
+   * @param {Response} r @param {number} frames
+   */
   async #answered(r, frames) {
     const refused = { 404: "match ended", 401: "key refused", 403: "invite expired" }[r.status];
     if (refused) {
       await discard(r);
-      return this.#refused(refused);
+      this.#refused(refused);
+      return true;
     }
     if (r.ok) this.sent += frames;
     this.onAnswer(`${r.status} ${await r.text()}`);
+    return r.status !== 409 && r.status < 500;
   }
 
   /** Takes no more frames; what is batched still goes. Resolves once it is all posted. */
