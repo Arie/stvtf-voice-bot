@@ -6,6 +6,7 @@ import { noMentions, reply } from "./messages.mjs";
 /**
  * @typedef {{
  *   join: () => Promise<void>; leave: (why: string) => Promise<unknown> | void; unlinked: () => Promise<string[]>;
+ *   hasPeople?: () => boolean;
  * }} Joined
  */
 
@@ -90,7 +91,9 @@ export async function rejoin(client, o, kept) {
   const voice = await guild?.channels.fetch(kept.channel).catch(() => null);
   if (!match || !guild || !voice?.isVoiceBased() || o.sessions.has(guild.id)) return o.kept.forget(kept.guild);
   try {
-    await enter(o, guild, voice, match, kept.delay);
+    const session = await enter(o, guild, voice, match, kept.delay);
+    // Everyone went while it was away.
+    if (session.hasPeople?.() === false) session.leave("channel empty");
   } catch {
     o.kept.forget(kept.guild);
     // It kept its name when it stopped, to go back in.

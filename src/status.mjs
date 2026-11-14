@@ -5,6 +5,9 @@ import { discard } from "./http.mjs";
 
 const POST_MS = 3000;
 
+/** What an answer's status says is the end of it. @type {Record<number, string | undefined>} */
+export const REFUSED = { 404: "match ended", 401: "key refused", 403: "invite expired" };
+
 /**
  * Where the bot is in a channel, for the page to go by (`status` is only for showing): in it,
  * could not get in, or out again. The status says which channel and how many are there, why it
@@ -16,6 +19,8 @@ export const STATE = /** @type {const} */ ({ in: "in", failed: "failed", left: "
 /**
  * @param {{ page: string; key: string; invite: string | null; fetch?: typeof fetch }} target
  * @param {{ kind: "discord" | "mumble"; state: State; status?: string; people?: { id: string; name: string }[]; left?: boolean; asked?: number; job?: number; channel?: string }} body
+ * @returns {Promise<string | undefined>} Why stv.tf will have none of it, if so: the match is gone,
+ *   the key refused or the invite expired, as a voice post is told.
  */
 export async function postStatus(target, body) {
   try {
@@ -27,6 +32,7 @@ export async function postStatus(target, body) {
       redirect: "error",
     });
     await discard(r);
+    return REFUSED[r.status];
   } catch {
     // Not answering now: it is told again soon.
   }

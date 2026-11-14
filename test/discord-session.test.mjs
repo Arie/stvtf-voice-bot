@@ -31,9 +31,12 @@ function world() {
   });
   /** @type {{ status?: string; state?: string; channel?: string; frames?: string[]; left?: boolean }[]} */
   const told = [];
-  const fetch = fetchOf(
-    async (url, init) => (told.push(JSON.parse(init.body)), { ok: true, status: 204, text: async () => "" }),
-  );
+  /** What stv.tf answers. */
+  const answers = { status: 204 };
+  const fetch = fetchOf(async (url, init) => {
+    told.push(JSON.parse(init.body));
+    return { ok: answers.status < 300, status: answers.status, text: async () => "" };
+  });
   /** @type {string[]} */
   const gone = [];
   const c = new DiscordSession({
@@ -46,7 +49,7 @@ function world() {
     fetch,
     voice: { joinVoiceChannel: stand(() => connection), entersState: stand(async () => {}) },
   });
-  return { c, channel, members, member, connection, streams, told, gone };
+  return { c, channel, members, member, connection, streams, told, gone, answers };
 }
 
 test("a voice connection's error leaves that channel, and nothing else", async () => {
@@ -163,4 +166,15 @@ test("what stv.tf is told says where the bot is: in, out again, or never in", as
     never.told.map(t => [t.state, t.left]),
     [["failed", true]],
   );
+});
+
+test("a match gone is left though nobody talks: its status is answered so", async () => {
+  const w = world();
+  await w.c.join();
+  await tick();
+  assert.deepEqual(w.gone, []);
+  w.answers.status = 404;
+  w.c.reportStatus();
+  await until(() => w.gone.length);
+  assert.deepEqual(w.gone, ["match ended"]);
 });

@@ -169,3 +169,21 @@ test("stopped with nowhere to keep its channels, it says it left, as it will not
   await tick();
   assert.match(w.said.find(s => s[0] === "channel")?.[1]?.content ?? "", /Left: restarting/);
 });
+
+test("back in a channel everyone left meanwhile, it leaves", async () => {
+  const w = world();
+  const voice = { id: "42", type: 2, isVoiceBased: () => true, send: async () => {} };
+  const guild = { id: "g", members: { me: { setNickname: async () => {} } }, channels: { fetch: async () => voice } };
+  /** @type {import("discord.js").Client} */
+  const client = stand({ guilds: { fetch: async () => guild } });
+  /** @type {string[]} */
+  const left = [];
+  w.o.makeSession = () => ({
+    join: async () => {},
+    leave: why => void left.push(why),
+    unlinked: async () => [],
+    hasPeople: () => false,
+  });
+  await rejoin(client, w.o, KEPT);
+  assert.deepEqual(left, ["channel empty"]);
+});

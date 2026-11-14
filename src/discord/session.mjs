@@ -126,7 +126,16 @@ export class DiscordSession {
       .filter(m => !m.user.bot)
       .map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    postStatus(this.#statusTarget(), { kind: "discord", state: STATE.in, status, people, channel: this.channel.id });
+    // A channel nobody talks in hears of a match gone here: no voice post is answered so.
+    postStatus(this.#statusTarget(), {
+      kind: "discord",
+      state: STATE.in,
+      status,
+      people,
+      channel: this.channel.id,
+    }).then(refused => {
+      if (refused) this.leave(refused);
+    });
   }
 
   /** Where stv.tf is told how it goes. */
