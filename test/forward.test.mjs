@@ -141,6 +141,43 @@ test("what waited longer than its delay is dropped: its moment on the stream is 
   assert.deepEqual([posts.length, Buffer.from(posts[11].body.frames[0], "base64")[0], posts[11].body.late], [12, 5, 0]);
 });
 
+test("what waits of a speaker goes onto their own last post while they talk on, whoever spoke meanwhile", async () => {
+  /** @type {Body[]} */
+  const posts = [];
+  /** @type {(() => void)[]} */
+  const answers = [];
+  const fetch = fetchOf((url, init) => {
+    posts.push(JSON.parse(init.body));
+    return new Promise(r => answers.push(() => r({ status: 200, ok: true, text: async () => "held" })));
+  });
+  const c = clock();
+  const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch, now: c.now, wait: c.wait });
+  const other = { steamid: null, id: "2", name: "b" };
+  const say = (/** @type {typeof other | typeof speaker} */ who) => {
+    for (let i = 0; i < 5; i++) f.add(who, Buffer.from([i]));
+  };
+  say(speaker);
+  await tick();
+  for (const who of [speaker, other, speaker]) say(who);
+  // A silence: what comes after it is not said right after what came before.
+  c.t += 300;
+  say(speaker);
+  for (let n = 0; n < 4; n++) {
+    await tick();
+    answers.shift()?.();
+  }
+  await f.flush();
+  assert.deepEqual(
+    posts.map(p => [p.discord, p.frames.length]),
+    [
+      ["1", 5],
+      ["1", 10],
+      ["2", 5],
+      ["1", 5],
+    ],
+  );
+});
+
 test("stopped, what is batched still goes, and no more is taken", async () => {
   const { posts, fetch } = fake();
   const f = new Forwarder({ url: "u", key: "k", delay: 90, fetch });

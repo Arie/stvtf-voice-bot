@@ -8,13 +8,15 @@ import { discard } from "./http.mjs";
 // `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
 /** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
 
-// A speaker's frames on their way, since `at` (ms).
-/** @typedef {{ speaker: Speaker; frames: string[]; at: number }} Waiting */
+// A speaker's frames on their way, since `at` (ms); the last of them came at `until`.
+/** @typedef {{ speaker: Speaker; frames: string[]; at: number; until: number }} Waiting */
 
 // Frames in a post as they come, and at most when posts are slow (what waits of a speaker goes
-// as one); the most posts waiting before the oldest go; and how long a post may take.
+// as one, while they talk on: no silence over `TOGETHER_MS` in it); the most posts waiting before
+// the oldest go; and how long a post may take.
 const BATCH = 5,
   MAX_POST = 30,
+  TOGETHER_MS = 200,
   MAX_WAITING = 100,
   POST_MS = 3000;
 // How long a post that failed waits to go again; and the least a post may wait, whatever its
@@ -78,13 +80,16 @@ export class Forwarder {
     const b = this.batches.get(id);
     this.batches.delete(id);
     if (!b?.frames.length) return;
-    // Behind a slow post, onto what already waits of this speaker (the last of all, so in order).
-    const last = this.waiting.at(-1);
-    if (this.inFlight && last && last.speaker.id === id && last.frames.length + b.frames.length <= MAX_POST) {
+    // Behind a slow post, onto what already waits of this speaker: their last, so in order.
+    const now = this.now();
+    const last = this.waiting.findLast(w => w.speaker.id === id);
+    const room = last && now - last.until <= TOGETHER_MS && last.frames.length + b.frames.length <= MAX_POST;
+    if (this.inFlight && last && room) {
       last.frames.push(...b.frames);
+      last.until = now;
       return;
     }
-    this.waiting.push({ ...b, at: this.now() });
+    this.waiting.push({ ...b, at: now, until: now });
     while (this.waiting.length > MAX_WAITING) this.waiting.shift();
     if (this.draining) return;
     this.draining = true;
