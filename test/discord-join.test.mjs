@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { joinCommand } from "../src/discord/join.mjs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { joinCommand, rejoin } from "../src/discord/join.mjs";
+import { Kept } from "../src/discord/kept.mjs";
 import { stand, tick } from "./stand.mjs";
 
 /** What the bot said, and where. @typedef {[string, { content: string; allowedMentions?: { parse: string[] } } | undefined]} Said */
@@ -39,6 +43,7 @@ function world({ deferReply = async () => {}, unlinked = async () => ["arie"] } 
     defaultDelay: 90,
     sessions: new Map(),
     joining: new Set(),
+    kept: new Kept(null),
     whoFor: () => stand({}),
     makeSession: c =>
       (made = {
@@ -105,4 +110,52 @@ test("a join that fails says nothing of leaving a channel it was never in", asyn
     w.said.map(s => s[0]),
     ["edit"],
   );
+});
+
+const KEPT = { guild: "g", channel: "42", link: "https://stv.tf/w/abc/?voice=0123456789abcdef", delay: 90 };
+
+test("a channel it is in is kept until it leaves for good, not when it only stops", async () => {
+  const w = world();
+  await joinCommand(w.i, w.o);
+  assert.deepEqual(w.o.kept.list(), [KEPT]);
+  w.o.kept.stopping = true;
+  w.made().o.onGone("restarting");
+  await tick();
+  assert.deepEqual(w.o.kept.list(), [KEPT], "it goes back in");
+  assert.equal(w.said.filter(s => s[0] === "channel").length, 0, "and says nothing of leaving");
+
+  const again = world();
+  await joinCommand(again.i, again.o);
+  again.made().o.onGone("match ended");
+  await tick();
+  assert.deepEqual(again.o.kept.list(), []);
+  assert.match(again.said.find(s => s[0] === "channel")?.[1]?.content ?? "", /Left: match ended/);
+});
+
+test("started again, it goes back into the channels kept, saying nothing", async () => {
+  const w = world();
+  const voice = { id: "42", type: 2, isVoiceBased: () => true, send: async () => assert.fail("it said something") };
+  const guild = { id: "g", members: { me: { setNickname: async () => {} } }, channels: { fetch: async () => voice } };
+  /** @type {import("discord.js").Client} */
+  const client = stand({
+    guilds: { fetch: async (/** @type {string} */ id) => (id === "g" ? guild : Promise.reject(new Error("gone"))) },
+  });
+  w.o.kept.add(KEPT);
+  w.o.kept.add({ ...KEPT, guild: "left" });
+  for (const kept of w.o.kept.list()) await rejoin(client, w.o, kept);
+  assert.deepEqual([...w.o.sessions.keys()], ["g"]);
+  assert.equal(w.made().o.delay, 90);
+  assert.deepEqual(w.o.kept.list(), [KEPT], "a server it is no longer in is forgotten");
+});
+
+test("the channels kept are in a file, read when it starts", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "stvtf-kept-")), "discord.json");
+  const kept = new Kept(path);
+  kept.add(KEPT);
+  kept.setDelay("g", 30);
+  assert.deepEqual(new Kept(path).list(), [{ ...KEPT, delay: 30 }]);
+  kept.forget("g");
+  assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), []);
+  writeFileSync(path, "not json");
+  assert.deepEqual(new Kept(path).list(), [], "a file that does not read keeps none");
 });

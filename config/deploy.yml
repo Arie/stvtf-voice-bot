@@ -25,10 +25,15 @@ servers:
 
 primary_role: bot
 
+volumes:
+  - stvtf-voice-bot:/data
+
 env:
   clear:
     # The first is where people link Steam, and where who they are is asked.
     STVTF_HOSTS: stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf
+    # The Discord channels it is in, to go back into after a restart.
+    STVTF_STATE: /data/discord.json
   secret:
     - DISCORD_TOKEN
     - STVTF_VOICE_KEY

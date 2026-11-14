@@ -13,10 +13,11 @@ import { noMentions, reply } from "./messages.mjs";
  * @param {import("discord.js").ChatInputCommandInteraction} i
  * @param {{
  *   hosts: string[]; key: string; nick: string; defaultDelay: number;
- *   sessions: Map<string, Joined>; joining: Set<string>;
+ *   sessions: Map<string, Joined>; joining: Set<string>; kept: import("./kept.mjs").Kept;
  *   whoFor: (url: string) => import("./who.mjs").Who;
  *   makeSession: (o: ConstructorParameters<typeof import("./session.mjs").DiscordSession>[0]) => Joined;
- * }} o `sessions`: the one the bot is in, by server; `joining`: servers it is on its way into.
+ * }} o `sessions`: the one the bot is in, by server; `joining`: servers it is on its way into;
+ *   `kept`: the channels it goes back into after a restart.
  */
 export async function joinCommand(i, o) {
   const { sessions, joining } = o;
@@ -33,18 +34,21 @@ export async function joinCommand(i, o) {
   joining.add(guildId);
   try {
     await joinAndAnnounce(i, o, voice, match, delay);
+    if (sessions.has(guildId))
+      o.kept.add({ guild: guildId, channel: voice.id, link: i.options.getString("link", true), delay });
   } finally {
     joining.delete(guildId);
   }
 }
 
 /**
- * @param {import("discord.js").ChatInputCommandInteraction} i @param {Parameters<typeof joinCommand>[1]} o
+ * Into `voice` for `match`: the session, in. It says it left when it does, unless the bot only
+ * stops (it goes back in).
+ * @param {Parameters<typeof joinCommand>[1]} o @param {import("discord.js").Guild} guild
  * @param {import("discord.js").VoiceBasedChannel} voice @param {NonNullable<ReturnType<typeof matchOf>>} match @param {number} delay
+ * @throws If it cannot join.
  */
-async function joinAndAnnounce(i, o, voice, match, delay) {
-  const guild = /** @type {import("discord.js").Guild} */ (i.guild);
-  await i.deferReply();
+async function enter(o, guild, voice, match, delay) {
   const session = o.makeSession({
     channel: voice,
     match,
@@ -55,6 +59,8 @@ async function joinAndAnnounce(i, o, voice, match, delay) {
       // Only one that was in says it left: one that would not join says so itself.
       if (o.sessions.get(guild.id) !== session) return;
       o.sessions.delete(guild.id);
+      if (o.kept.stopping) return;
+      o.kept.forget(guild.id);
       return Promise.allSettled([
         guild.members.me?.setNickname(null),
         voice.type === ChannelType.GuildVoice && voice.send(noMentions(`Left: ${why}`)),
@@ -63,12 +69,45 @@ async function joinAndAnnounce(i, o, voice, match, delay) {
   });
   try {
     await session.join();
-  } catch {
+  } catch (e) {
     session.leave("join failed");
-    return i.editReply("Can't join that channel.");
+    throw e;
   }
   o.sessions.set(guild.id, session);
   guild.members.me?.setNickname(o.nick).catch(() => {});
+  return session;
+}
+
+/**
+ * Back into a channel kept from before a restart, saying nothing; forgotten if it cannot.
+ * @param {import("discord.js").Client} client @param {Parameters<typeof joinCommand>[1]} o
+ * @param {import("./kept.mjs").KeptChannel} kept
+ */
+export async function rejoin(client, o, kept) {
+  const match = matchOf(kept.link, o.hosts);
+  const guild = await client.guilds.fetch(kept.guild).catch(() => null);
+  const voice = await guild?.channels.fetch(kept.channel).catch(() => null);
+  if (!match || !guild || !voice?.isVoiceBased() || o.sessions.has(guild.id)) return o.kept.forget(kept.guild);
+  try {
+    await enter(o, guild, voice, match, kept.delay);
+  } catch {
+    o.kept.forget(kept.guild);
+  }
+}
+
+/**
+ * @param {import("discord.js").ChatInputCommandInteraction} i @param {Parameters<typeof joinCommand>[1]} o
+ * @param {import("discord.js").VoiceBasedChannel} voice @param {NonNullable<ReturnType<typeof matchOf>>} match @param {number} delay
+ */
+async function joinAndAnnounce(i, o, voice, match, delay) {
+  const guild = /** @type {import("discord.js").Guild} */ (i.guild);
+  await i.deferReply();
+  let session;
+  try {
+    session = await enter(o, guild, voice, match, delay);
+  } catch {
+    return i.editReply("Can't join that channel.");
+  }
   // Said at once, as it is recording already; who has no link (a question per person) after.
   await i.editReply(
     noMentions(`🔴 **Recording** for ${match.page} (${delay ? `delay ${delay} s` : "live"}). \`/stv leave\` to stop.`),

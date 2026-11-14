@@ -4,7 +4,8 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import { homeOf } from "../match.mjs";
 import { DEFAULT_DELAY, command, delayCommand, leaveCommand } from "./commands.mjs";
-import { joinCommand } from "./join.mjs";
+import { joinCommand, rejoin } from "./join.mjs";
+import { Kept } from "./kept.mjs";
 import { reply } from "./messages.mjs";
 import { DiscordSession } from "./session.mjs";
 import { Who } from "./who.mjs";
@@ -39,7 +40,9 @@ async function onCommand(i, o, sessions) {
     case "leave":
       return leaveCommand(i, session);
     case "delay":
-      return delayCommand(i, session);
+      await delayCommand(i, session);
+      if (i.guild && session) o.kept.setDelay(i.guild.id, session.delay);
+      return;
     case "link":
       return reply(i, `Link Steam: ${homeOf(o.hosts)}/voice/link`);
   }
@@ -50,12 +53,14 @@ const newClient = () => new Client({ intents: [GatewayIntentBits.Guilds, Gateway
 /**
  * Signs in to Discord with `token` and takes `/stv` commands, for matches on `hosts` (voice goes
  * there with `key`); `onLoginFailed` is told if Discord will not have the token. Its `stop` leaves
- * every channel, once each has said so, and signs out.
- * @param {{ hosts: string[]; key: string; token: string; onLoginFailed: (e: Error) => void; client?: Client }} o
+ * every channel, saying nothing there (it goes back into them when started again), and signs out.
+ * @param {{ hosts: string[]; key: string; token: string; state?: string | null; onLoginFailed: (e: Error) => void; client?: Client }} o
+ *   `state`: the file the channels it is in are kept in, to go back into after a restart;
  *   `client` is for tests.
  * @returns {{ stop: (why: string) => Promise<void> }}
  */
-export function startDiscord({ hosts, key, token, onLoginFailed, client = newClient() }) {
+export function startDiscord({ hosts, key, token, state = null, onLoginFailed, client = newClient() }) {
+  const kept = new Kept(state);
   /** @type {Map<string, DiscordSession>} The bot in a channel, by server. */
   const sessions = new Map();
   /** @type {Parameters<typeof joinCommand>[1]} */
@@ -65,6 +70,7 @@ export function startDiscord({ hosts, key, token, onLoginFailed, client = newCli
     nick: NICK,
     defaultDelay: DEFAULT_DELAY,
     sessions,
+    kept,
     // Servers the bot is on its way into a channel of.
     joining: new Set(),
     whoFor: whoCache(key),
@@ -79,6 +85,9 @@ export function startDiscord({ hosts, key, token, onLoginFailed, client = newCli
       .set([command.toJSON()])
       .catch(e => console.error("stvtf-voice-bot: commands not set:", e));
     console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${hosts.join(", ")}`);
+    // Back into the channels it was in when it stopped.
+    for (const channel of kept.list()) await rejoin(client, joinOptions, channel);
+    if (sessions.size) console.log(`stvtf-voice-bot: back in ${sessions.size} channels`);
   });
 
   client.on("interactionCreate", async i => {
@@ -92,6 +101,7 @@ export function startDiscord({ hosts, key, token, onLoginFailed, client = newCli
   client.login(token).catch(onLoginFailed);
   return {
     stop: async why => {
+      kept.stopping = true;
       await Promise.allSettled([...sessions.values()].map(s => s.leave(why)));
       await client.destroy();
     },

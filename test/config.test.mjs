@@ -10,8 +10,10 @@ test("the four regions unless said otherwise; a Mumble server anywhere only when
     key: "k",
     token: "t",
     anywhere: false,
+    state: null,
   });
   assert.equal(config({ ...env, STVTF_MUMBLE_ANYWHERE: "1" }).anywhere, true);
+  assert.equal(config({ ...env, STVTF_STATE: "/data/discord.json" }).state, "/data/discord.json");
 });
 
 test("hosts with nothing between their commas are no hosts", () => {

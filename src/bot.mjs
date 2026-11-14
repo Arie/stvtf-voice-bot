@@ -16,12 +16,13 @@ try {
   console.error(`stvtf-voice-bot: ${/** @type {Error} */ (e).message}`);
   process.exit(2);
 }
-const { hosts, key, token, anywhere } = settings;
+const { hosts, key, token, anywhere, state } = settings;
 
 const discord = startDiscord({
   hosts,
   key,
   token,
+  state,
   onLoginFailed: e => {
     console.error(`stvtf-voice-bot: Discord: ${e.message}`);
     process.exit(1);

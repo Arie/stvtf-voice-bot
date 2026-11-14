@@ -96,5 +96,6 @@ and no ports (it only connects out). Secrets are read from `~/.config/stvtf/`:
 | `bin/deploy` | stops the running bot, then starts the new one |
 | `kamal logs` | follows its log |
 
-A deploy takes the bot out of the voice channels it is in (it says so there); `/stv join` brings
-it back. So not during a match.
+A deploy takes the bot out of its voice channels for some seconds: it says nothing there, and
+goes back into each when it starts (Mumble's are asked of stv.tf; Discord's are kept in
+`STVTF_STATE`, a file on the `stvtf-voice-bot` volume). What is said meanwhile is not heard.
