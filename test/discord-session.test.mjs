@@ -39,6 +39,8 @@ function world() {
   });
   /** @type {string[]} */
   const gone = [];
+  /** @type {string[]} What it logged. */
+  const printed = [];
   const c = new DiscordSession({
     channel: stand(channel),
     match: { voice: "https://stv.tf/w/m/voice", page: "https://stv.tf/w/m/", invite: "inv" },
@@ -46,10 +48,11 @@ function world() {
     key: "k",
     who: { peek: () => null, lookup: async () => null },
     onGone: why => void gone.push(why),
+    print: line => void printed.push(line),
     fetch,
     voice: { joinVoiceChannel: stand(() => connection), entersState: stand(async () => {}) },
   });
-  return { c, channel, members, member, connection, streams, told, gone, answers };
+  return { c, channel, members, member, connection, streams, told, gone, answers, printed };
 }
 
 test("a voice connection's error leaves that channel, and nothing else", async () => {
@@ -177,4 +180,16 @@ test("a match gone is left though nobody talks: its status is answered so", asyn
   w.c.reportStatus();
   await until(() => w.gone.length);
   assert.deepEqual(w.gone, ["match ended"]);
+});
+
+test("the log says when it came into a channel, and why it left", async () => {
+  const w = world();
+  await w.c.join();
+  w.c.leave("channel empty");
+  await tick();
+  const said = w.printed.filter(l => /: (In|Leaving)/.test(l));
+  assert.deepEqual(said, [
+    "stvtf-voice-bot: G → https://stv.tf/w/m/: In General",
+    "stvtf-voice-bot: G → https://stv.tf/w/m/: Leaving: channel empty",
+  ]);
 });

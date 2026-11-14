@@ -19,7 +19,8 @@ export class DiscordSession {
    *   channel: import("discord.js").VoiceBasedChannel; match: { voice: string; page: string; invite: string | null };
    *   delay: number; key: string; who: Pick<import("./who.mjs").Who, "peek" | "lookup">; onGone: (why: string) => Promise<unknown> | void;
    *   fetch?: typeof fetch; voice?: { joinVoiceChannel: typeof joinVoiceChannel; entersState: typeof entersState };
-   * }} o `fetch` and `voice` are for tests.
+   *   print?: (line: string) => void;
+   * }} o `fetch`, `voice` and `print` are for tests.
    */
   constructor(o) {
     this.o = o;
@@ -36,7 +37,9 @@ export class DiscordSession {
     });
     this.voice = o.voice ?? { joinVoiceChannel, entersState };
     /** What stv.tf answers its posts, or why they failed: logged when it changes. */
-    this.log = logOf(`${o.channel.guild.name} → ${o.match.page}`);
+    this.log = logOf(`${o.channel.guild.name} → ${o.match.page}`, o.print);
+    /** That it came into the channel, and why it left. */
+    this.logStatus = logOf(`${o.channel.guild.name} → ${o.match.page}`, o.print);
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
     /** @type {Map<string, Promise<void>>} Each speaker's frames on their way to the forwarder, in order. */
@@ -70,6 +73,7 @@ export class DiscordSession {
     this.connection.on("error", () => this.leave("voice error"));
     await this.voice.entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
     this.inChannel = true;
+    this.logStatus(`In ${channel.name}`);
     this.connection.on(VoiceConnectionStatus.Disconnected, () => this.#disconnected());
     this.connection.receiver.speaking.on("start", id => this.#hear(id));
     this.timer = setInterval(() => this.forwarder.flush(), FLUSH_MS);
@@ -168,6 +172,7 @@ export class DiscordSession {
   leave(why) {
     if (this.leaving) return this.leaving;
     this.gone = true;
+    this.logStatus(`Leaving: ${why}`);
     clearInterval(this.timer);
     clearInterval(this.reporting);
     const told = postStatus(this.#statusTarget(), {
