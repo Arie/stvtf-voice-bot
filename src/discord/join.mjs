@@ -59,7 +59,8 @@ async function enter(o, guild, voice, match, delay) {
       // Only one that was in says it left: one that would not join says so itself.
       if (o.sessions.get(guild.id) !== session) return;
       o.sessions.delete(guild.id);
-      if (o.kept.stopping) return;
+      // Stopped, with its channels kept: it says nothing, and goes back in.
+      if (o.kept.stopping && o.kept.path) return;
       o.kept.forget(guild.id);
       return Promise.allSettled([
         guild.members.me?.setNickname(null),
@@ -92,6 +93,8 @@ export async function rejoin(client, o, kept) {
     await enter(o, guild, voice, match, kept.delay);
   } catch {
     o.kept.forget(kept.guild);
+    // It kept its name when it stopped, to go back in.
+    guild.members.me?.setNickname(null).catch(() => {});
   }
 }
 

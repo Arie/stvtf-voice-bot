@@ -3,7 +3,7 @@
 # whichever region a match is on.
 #   bin/build && bin/deploy     (or: kamal deploy)
 #
-# A deploy drops the bot from the voice channels it is in (it says so there): `/stv join` again.
+# A deploy takes the bot out of its voice channels for some seconds: it goes back into each.
 service: stvtf-voice-bot
 image: arie/stvtf-voice-bot
 

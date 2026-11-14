@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy the checked-out commit. The image must already be pushed (run bin/build first).
-# The bot leaves the voice channels it is in; `/stv join` brings it back.
+# The bot leaves the voice channels it is in, and goes back into each when it starts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ -z "${VERSION:-}" ]] && [[ -n "$(git status --porcelain)" ]]; then

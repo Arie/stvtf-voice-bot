@@ -155,7 +155,6 @@ export class DiscordSession {
     return [...this.channel.members.values()].some(m => !m.user.bot);
   }
 
-  /** @param {string} why */
   /** @param {string} why @returns {Promise<void>} Once stv.tf is told, what was said is posted, and the channel told. */
   leave(why) {
     if (this.leaving) return this.leaving;

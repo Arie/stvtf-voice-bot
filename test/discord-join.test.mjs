@@ -116,6 +116,7 @@ const KEPT = { guild: "g", channel: "42", link: "https://stv.tf/w/abc/?voice=012
 
 test("a channel it is in is kept until it leaves for good, not when it only stops", async () => {
   const w = world();
+  w.o.kept = new Kept(join(mkdtempSync(join(tmpdir(), "stvtf-kept-")), "discord.json"));
   await joinCommand(w.i, w.o);
   assert.deepEqual(w.o.kept.list(), [KEPT]);
   w.o.kept.stopping = true;
@@ -158,4 +159,13 @@ test("the channels kept are in a file, read when it starts", () => {
   assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), []);
   writeFileSync(path, "not json");
   assert.deepEqual(new Kept(path).list(), [], "a file that does not read keeps none");
+});
+
+test("stopped with nowhere to keep its channels, it says it left, as it will not be back", async () => {
+  const w = world();
+  await joinCommand(w.i, w.o);
+  w.o.kept.stopping = true;
+  w.made().o.onGone("restarting");
+  await tick();
+  assert.match(w.said.find(s => s[0] === "channel")?.[1]?.content ?? "", /Left: restarting/);
 });
