@@ -31,6 +31,9 @@ channel, the match's link with its invite, the delay) until it leaves them. It l
 to, when it is moved, when the match ends or its invite is refused; in Discord also when the
 channel is empty. A Discord voice connection that drops has 5 s to come back.
 
+What goes wrong in the bot is told to Sentry when `SENTRY_DSN` is set: the error and its stack,
+not what was said, nor who or where.
+
 ## Commands
 
 | | |
@@ -62,6 +65,7 @@ DISCORD_TOKEN=… STVTF_VOICE_KEY=… STVTF_HOSTS=your.host npm start
 | `STVTF_VOICE_KEY` | the key the stv.tf servers were started with; required |
 | `STVTF_HOSTS` | the only hosts voice is ever posted to, comma separated (default `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`; `localhost:8080` for a local one, over plain http). The first is where people link Steam and where the bot asks who they are, for matches on any of them: only it needs the Discord application; all share the voice key |
 | `STVTF_STATE` | a file to keep the Discord channels it is in, to go back into them when it starts; without, it goes back into none |
+| `SENTRY_DSN` | where errors are told (a Sentry project); without, nowhere. `SENTRY_RELEASE` and `SENTRY_ENVIRONMENT` say which version and where |
 | `STVTF_MUMBLE_ANYWHERE` | `1` lets it join a Mumble server on this machine or its network: for trying out, and at a LAN. stv.tf refuses such servers too, until it is started with the same setting |
 
 Node 26 or later. Without the token or the key, or with a token Discord refuses, it says so and

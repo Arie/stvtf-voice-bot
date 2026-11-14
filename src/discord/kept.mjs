@@ -1,5 +1,6 @@
 // The Discord channels the bot is in, kept in a file: after a restart it goes back into them.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { fault } from "../fault.mjs";
 
 /** A channel the bot is in: its server, the voice channel, the match's link as given, the delay. @typedef {{ guild: string; channel: string; link: string; delay: number }} KeptChannel */
 
@@ -49,7 +50,7 @@ export class Kept {
       writeFileSync(`${this.path}.part`, JSON.stringify(this.list()));
       renameSync(`${this.path}.part`, this.path);
     } catch (e) {
-      console.error(`stvtf-voice-bot: ${this.path}: ${/** @type {Error} */ (e).message}`);
+      fault(this.path, e);
     }
   }
 }

@@ -2,6 +2,7 @@
 // recording and passes what is said to the match on stv.tf the link names, as the speakers'
 // players (their Steam accounts, linked through Discord on stv.tf). One channel per server.
 import { Client, GatewayIntentBits } from "discord.js";
+import { fault } from "../fault.mjs";
 import { homeOf } from "../match.mjs";
 import { DEFAULT_DELAY, command, delayCommand, leaveCommand } from "./commands.mjs";
 import { joinCommand, rejoin } from "./join.mjs";
@@ -78,12 +79,10 @@ export function startDiscord({ hosts, key, token, state = null, onLoginFailed, c
   };
 
   // Unheard, an error would end the process; the client reconnects by itself.
-  client.on("error", e => console.error("stvtf-voice-bot:", e));
+  client.on("error", e => fault("Discord", e));
 
   client.once("clientReady", async () => {
-    await client.application?.commands
-      .set([command.toJSON()])
-      .catch(e => console.error("stvtf-voice-bot: commands not set:", e));
+    await client.application?.commands.set([command.toJSON()]).catch(e => fault("commands not set", e));
     console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${hosts.join(", ")}`);
     // Back into the channels it was in when it stopped.
     for (const channel of kept.list()) await rejoin(client, joinOptions, channel);
@@ -92,7 +91,7 @@ export function startDiscord({ hosts, key, token, state = null, onLoginFailed, c
 
   client.on("interactionCreate", async i => {
     if (!i.isChatInputCommand() || i.commandName !== "stv") return;
-    await onCommand(i, joinOptions, sessions).catch(e => console.error("stvtf-voice-bot:", e));
+    await onCommand(i, joinOptions, sessions).catch(e => fault("/stv", e));
   });
 
   // Someone came or went, or the bot was moved.

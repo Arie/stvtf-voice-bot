@@ -2,6 +2,7 @@
 // (src/mumble), says it is recording, and passes what is said to a match on stv.tf. Its settings
 // are in src/config.mjs.
 import { config } from "./config.mjs";
+import { fault, told } from "./fault.mjs";
 import { startDiscord } from "./discord/bot.mjs";
 import { startMumble } from "./mumble/bot.mjs";
 import { stopOnSignal } from "./shutdown.mjs";
@@ -24,8 +25,8 @@ const discord = startDiscord({
   token,
   state,
   onLoginFailed: e => {
-    console.error(`stvtf-voice-bot: Discord: ${e.message}`);
-    process.exit(1);
+    fault("Discord login", e);
+    void told(2000).then(() => process.exit(1));
   },
 });
 const mumble = startMumble({ hosts, key, anywhere });

@@ -7,4 +7,4 @@ COPY src ./src
 # Where the channels it is in are kept (STVTF_STATE), a volume: the bot's own to write.
 RUN mkdir /data && chown node:node /data
 USER node
-CMD ["node", "src/bot.mjs"]
+CMD ["node", "--import", "./src/instrument.mjs", "src/bot.mjs"]

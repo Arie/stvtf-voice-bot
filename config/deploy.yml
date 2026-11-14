@@ -34,9 +34,12 @@ env:
     STVTF_HOSTS: stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf
     # The Discord channels it is in, to go back into after a restart.
     STVTF_STATE: /data/discord.json
+    # Errors are told to Sentry (SENTRY_DSN), as this version's (KAMAL_VERSION).
+    SENTRY_ENVIRONMENT: production
   secret:
     - DISCORD_TOKEN
     - STVTF_VOICE_KEY
+    - SENTRY_DSN
 
 ssh:
   user: kamal
