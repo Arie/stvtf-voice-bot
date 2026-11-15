@@ -40,6 +40,7 @@ env:
     - DISCORD_TOKEN
     - STVTF_VOICE_KEY
     - SENTRY_DSN
+    - STVTF_MUMBLE_CERTS
 
 ssh:
   user: kamal

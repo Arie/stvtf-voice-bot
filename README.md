@@ -66,6 +66,7 @@ DISCORD_TOKEN=… STVTF_VOICE_KEY=… STVTF_HOSTS=your.host npm start
 | `STVTF_HOSTS` | the only hosts voice is ever posted to, comma separated (default `stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf`; `localhost:8080` for a local one, over plain http). The first is where people link Steam and where the bot asks who they are, for matches on any of them: only it needs the Discord application; all share the voice key |
 | `STVTF_STATE` | a file to keep the Discord channels it is in, to go back into them when it starts; without, it goes back into none |
 | `SENTRY_DSN` | where errors are told (a Sentry project); without, nowhere. `SENTRY_RELEASE` and `SENTRY_ENVIRONMENT` say which version and where |
+| `STVTF_MUMBLE_CERTS` | the certificates it signs in to Mumble servers by: base64 of the certificates and then their keys (PEM), in the same order; without, it signs in by none |
 | `STVTF_MUMBLE_ANYWHERE` | `1` lets it join a Mumble server on this machine or its network: for trying out, and at a LAN. stv.tf refuses such servers too, until it is started with the same setting |
 
 Node 26 or later. Without the token or the key, or with a token Discord refuses, it says so and
@@ -89,7 +90,11 @@ Before each commit, the quick ones (all but the audit), once enabled with
 Teams on Mumble need no command: on the match's page on stv.tf, whoever started it (or a caster)
 gives the server's address, its password and the channel, and the bot joins there at once, marked
 as recording (Mumble's own sign), and says so in the channel. It works with any server it can
-reach with a password; it has no certificate, so not with one that only lets certificates in.
+reach with a password. With certificates (`STVTF_MUMBLE_CERTS`) it signs in by one, the same each
+time, under that one's name (`stv.tf`; a second bot on the same server at once by the second,
+`stv.tf-2`, and so on): a server's admins know it again by its fingerprint, listed at
+<https://stv.tf/mumble> (the bot's comment says so), and may register it, or let only
+certificates in. More bots on a server than certificates, and the rest sign in by none.
 Speakers are known by their certificate, or without one by who they are on that server, and put
 on players on the match's page. Whatever length of packet they send (10 to 60 ms) is regrouped
 into 20 ms without decoding. The server must be out on the internet, unless

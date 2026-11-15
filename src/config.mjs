@@ -2,13 +2,15 @@
 // voice with); STVTF_HOSTS (the stv.tf hosts voice may go to, comma separated; default the four
 // regions); STVTF_MUMBLE_ANYWHERE=1 (a Mumble server may be on this machine or its network: for
 // trying out, and at a LAN); STVTF_STATE (a file to keep the Discord channels it is in, to go back
-// into them after a restart; without, it goes back into none).
+// into them after a restart; without, it goes back into none); STVTF_MUMBLE_CERTS (its Mumble
+// certificates, see src/mumble/certs.mjs).
+import { identitiesOf } from "./mumble/certs.mjs";
 
 const HOSTS = "stv.tf,na.stv.tf,au.stv.tf,sea.stv.tf";
 
 /**
  * @param {Record<string, string | undefined>} env
- * @returns {{ hosts: string[]; key: string; token: string; anywhere: boolean; state: string | null }}
+ * @returns {{ hosts: string[]; key: string; token: string; anywhere: boolean; state: string | null; certs: import("./mumble/certs.mjs").Identity[] }}
  * @throws {Error} Saying what is missing.
  */
 export function config(env) {
@@ -20,5 +22,11 @@ export function config(env) {
     .map(h => h.trim())
     .filter(Boolean);
   if (!hosts.length) throw new Error("set STVTF_HOSTS");
-  return { hosts, key, token, anywhere: env.STVTF_MUMBLE_ANYWHERE === "1", state: env.STVTF_STATE || null };
+  let certs;
+  try {
+    certs = env.STVTF_MUMBLE_CERTS ? identitiesOf(env.STVTF_MUMBLE_CERTS) : [];
+  } catch (e) {
+    throw new Error(`STVTF_MUMBLE_CERTS: ${/** @type {Error} */ (e).message}`, { cause: e });
+  }
+  return { hosts, key, token, anywhere: env.STVTF_MUMBLE_ANYWHERE === "1", state: env.STVTF_STATE || null, certs };
 }

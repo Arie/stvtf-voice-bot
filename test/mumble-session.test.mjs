@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { Identities, identitiesOf } from "../src/mumble/certs.mjs";
 import { tlsOptions } from "../src/mumble/client.mjs";
 import { nameOf } from "../src/mumble/job.mjs";
 import { startSession } from "../src/mumble/session.mjs";
@@ -132,6 +134,30 @@ test("a name in use is taken with a letter after it", async () => {
   await until(() => w.statuses.length);
   assert.equal(w.statuses.at(-1), "Team Comms · 1");
   await w.s.leave("done");
+});
+
+test("with a certificate it signs in by that one's name, says where it is listed, and gives it back", async () => {
+  const ids = new Identities(identitiesOf(readFileSync(new URL("fixtures/mumble-certs.b64", import.meta.url), "utf8")));
+  const w = session({}, { identities: ids });
+  await until(() => w.servers.length);
+  // The name is another's on this server: the match's, then.
+  w.server().send("Reject", { type: 3, reason: "Wrong certificate or password for existing user" });
+  await until(() => w.servers.length === 2);
+  await until(() => w.server().sent("Authenticate").length);
+  assert.deepEqual(
+    w.servers.map(s => s.sent("Authenticate")[0].username),
+    ["stv.tf", "stv.tf-m1"],
+  );
+  welcomeIn(w.server());
+  await until(() => w.statuses.length);
+  assert.deepEqual(w.server().sent("UserState").at(-1), {
+    session: 2,
+    comment: "stv.tf voice bot · https://stv.tf/mumble",
+  });
+  assert.equal(ids.take("mumble.example:64738")?.name, "stv.tf-2", "the first is in use there");
+  await w.s.leave("done");
+  await tick();
+  assert.equal(ids.take("mumble.example:64738")?.name, "stv.tf", "free once it left");
 });
 
 test("told to leave while joining, it says nothing more", async () => {

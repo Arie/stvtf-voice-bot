@@ -4,6 +4,7 @@
 import { Forwarder } from "../forward.mjs";
 import { logOf } from "../log.mjs";
 import { STATE } from "../status.mjs";
+import { PAGE } from "./certs.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
 import { addressOf } from "./address.mjs";
 import { channelOf, nameOf } from "./job.mjs";
@@ -12,12 +13,12 @@ import { Repacker20ms } from "./repack.mjs";
 // How often what waits is sent, and how often the page is told who is in the channel.
 const FLUSH_MS = 100,
   STATUS_MS = 10_000;
-// What a name in use is refused as (Mumble's Reject.UsernameInUse), and how many names are tried.
+// Mumble's Reject.UsernameInUse, and WrongUserPW (the name is registered to another).
 const IN_USE = 5,
-  NAMES = 3;
+  ANOTHERS = 3;
 /** @typedef {(state: import("../status.mjs").State, text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
- * @typedef {{ key: string; anywhere?: boolean; name?: string; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
+ * @typedef {{ key: string; anywhere?: boolean; name?: string; identities?: import("./certs.mjs").Identities; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void>; print?: (line: string) => void }} Options
  *   `lookup`, `connect`, `fetch`, `pause` and `print` are for tests.
  */
@@ -43,6 +44,8 @@ class MumbleSession {
   packers = new Map();
   /** @type {string | undefined} */
   address;
+  /** @type {ReturnType<import("./certs.mjs").Identities["take"]>} Its certificate, if any. */
+  identity = null;
 
   /** @param {import("./job.mjs").Job} job @param {OnStatus} onStatus @param {Options} o */
   constructor(job, onStatus, o) {
@@ -120,9 +123,11 @@ class MumbleSession {
     const { job } = this;
     try {
       this.address = await addressOf(job.host, { lookup: this.o.lookup, anywhere: this.o.anywhere });
+      this.identity = this.o.identities?.take(`${job.host}:${job.port}`) ?? null;
       const client = await this.#join();
       if (!client) return;
       if (this.gone) return void client.leave("disconnected");
+      if (this.identity) client.describe(`stv.tf voice bot · ${PAGE}`);
       client.say(`Recording for ${job.page} (${job.delay ? `delay ${job.delay} s` : "live"})`);
       this.#reportStatus();
       this.timers.push(
@@ -133,22 +138,29 @@ class MumbleSession {
       this.gone = true;
       // Told to leave, it has nothing more to say: another may be there by now.
       if (!this.closing) this.onStatus(STATE.failed, `Could not join: ${/** @type {Error} */ (e).message}`, []);
+    } finally {
+      // Its certificate is free once the connection is closed.
+      const { identity } = this;
+      void (this.client?.closed ?? Promise.resolve()).then(() => identity?.release());
     }
   }
 
-  /** In the channel; a name in use all the same is taken with a letter after it. */
+  /** In the channel: by its certificate's name, else its match's, else that with a letter after. */
   async #join() {
-    const name = this.o.name ?? nameOf(this.job);
-    for (let n = 1; ; n++) {
+    const own = this.o.name ?? nameOf(this.job);
+    const names = [...(this.identity ? [this.identity.name] : []), own, `${own}-b`, `${own}-c`];
+    for (const [n, name] of names.entries()) {
       if (this.gone) return null;
-      const client = (this.client = this.#client(n === 1 ? name : `${name}-${"abc"[n - 1]}`));
+      const client = (this.client = this.#client(name));
       try {
         await client.join();
         return client;
       } catch (e) {
-        if (/** @type {{ reject?: number }} */ (e).reject !== IN_USE || n >= NAMES) throw e;
+        const { reject } = /** @type {{ reject?: number }} */ (e);
+        if ((reject !== IN_USE && reject !== ANOTHERS) || n === names.length - 1) throw e;
       }
     }
+    return null;
   }
 
   /** @param {string} username */
@@ -160,6 +172,8 @@ class MumbleSession {
       port: job.port,
       username,
       password: job.password || undefined,
+      cert: this.identity?.cert,
+      key: this.identity?.key,
       channel: job.channel,
       connect: this.o.connect,
       onVoice: v => this.#voice(v),

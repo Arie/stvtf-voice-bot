@@ -233,6 +233,11 @@ export class MumbleClient {
     this.#send("TextMessage", { channel_id: [this.channel], message: text });
   }
 
+  /** Sets its comment. @param {string} text */
+  describe(text) {
+    this.#send("UserState", { session: this.session, comment: text });
+  }
+
   /** Leaves the server: resolves once the connection is closed. @param {string} [why] */
   leave(why = "left") {
     this.#end(why);
