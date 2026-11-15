@@ -123,7 +123,8 @@ class MumbleSession {
     const { job } = this;
     try {
       this.address = await addressOf(job.host, { lookup: this.o.lookup, anywhere: this.o.anywhere });
-      this.identity = this.o.identities?.take(`${job.host}:${job.port}`) ?? null;
+      // By its address: a server under two names is one.
+      this.identity = this.o.identities?.take(`${this.address}:${job.port}`) ?? null;
       const client = await this.#join();
       if (!client) return;
       if (this.gone) return void client.leave("disconnected");

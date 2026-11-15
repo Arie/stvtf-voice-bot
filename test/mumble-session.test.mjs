@@ -154,10 +154,10 @@ test("with a certificate it signs in by that one's name, says where it is listed
     session: 2,
     comment: "stv.tf voice bot · https://stv.tf/mumble",
   });
-  assert.equal(ids.take("mumble.example:64738")?.name, "stv.tf-2", "the first is in use there");
+  assert.equal(ids.take("93.184.216.34:64738")?.name, "stv.tf-2", "the first is in use there");
   await w.s.leave("done");
   await tick();
-  assert.equal(ids.take("mumble.example:64738")?.name, "stv.tf", "free once it left");
+  assert.equal(ids.take("93.184.216.34:64738")?.name, "stv.tf", "free once it left");
 });
 
 test("told to leave while joining, it says nothing more", async () => {
