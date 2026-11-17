@@ -16,3 +16,8 @@ Sentry.init({
     stackFrameVariables: false,
   },
 });
+
+// The SDK sends its trace to stv.tf (`sentry-trace`), which continues it: each request a trace of
+// its own, not the process's one.
+const fetched = globalThis.fetch;
+globalThis.fetch = (...args) => Sentry.startNewTrace(() => fetched(...args));
