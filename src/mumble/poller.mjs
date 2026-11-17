@@ -5,7 +5,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { discard } from "../http.mjs";
 import { logOf } from "../log.mjs";
-import { STATE, postStatus } from "../status.mjs";
+import { STATE, postStatus } from "../stvtf/status.mjs";
 import { channelOf, isJob } from "./job.mjs";
 
 /** @typedef {import("./job.mjs").Job} Job */

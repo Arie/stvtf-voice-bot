@@ -3,7 +3,7 @@
 // players (their Steam accounts, linked through Discord on stv.tf). One channel per server.
 import { Client, GatewayIntentBits } from "discord.js";
 import { fault } from "../fault.mjs";
-import { homeOf } from "../match.mjs";
+import { homeOf } from "../stvtf/match.mjs";
 import { DEFAULT_DELAY, command, delayCommand, leaveCommand } from "./commands.mjs";
 import { joinCommand, rejoin } from "./join.mjs";
 import { Kept } from "./kept.mjs";

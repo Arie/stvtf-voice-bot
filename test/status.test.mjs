@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { postStatus } from "../src/status.mjs";
+import { postStatus } from "../src/stvtf/status.mjs";
 import { fetchOf, unread } from "./stand.mjs";
 
 test("stv.tf is told how it goes in a channel, and who is in it, with the key and the invite", async () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { homeOf, matchOf } from "../src/match.mjs";
+import { homeOf, matchOf } from "../src/stvtf/match.mjs";
 
 const hosts = ["stv.tf", "na.stv.tf"];
 

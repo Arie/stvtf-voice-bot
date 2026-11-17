@@ -1,7 +1,7 @@
 // stv.tf told how it goes in a channel the bot is in for a match, and who is in it (so they can
 // be put on players before they speak), or that the bot left: `POST <page>voice-status`.
 
-import { discard } from "./http.mjs";
+import { discard } from "../http.mjs";
 
 const POST_MS = 3000;
 

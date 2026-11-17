@@ -2,9 +2,9 @@
 // with who they are on Steam, to the match's forwarder. It leaves when told, when moved, when the
 // channel is empty of people, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
-import { Forwarder } from "../forward.mjs";
+import { Forwarder } from "../stvtf/forward.mjs";
 import { logOf } from "../log.mjs";
-import { STATE, postStatus } from "../status.mjs";
+import { STATE, postStatus } from "../stvtf/status.mjs";
 
 // How often what is batched is flushed, how long joining may take, how often stv.tf is told how
 // it goes and who is here, and how long a lost connection has to come back by itself.

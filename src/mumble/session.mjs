@@ -1,9 +1,9 @@
 // The bot in one Mumble channel for one match: every speaker's voice regrouped into packets of
 // 20 ms and passed to stv.tf, each known by who they are on that server (registered, or their
 // certificate), so the match's page can put them on a player and keep them there.
-import { Forwarder } from "../forward.mjs";
+import { Forwarder } from "../stvtf/forward.mjs";
 import { logOf } from "../log.mjs";
-import { STATE } from "../status.mjs";
+import { STATE } from "../stvtf/status.mjs";
 import { PAGE } from "./certs.mjs";
 import { MumbleClient, voiceId } from "./client.mjs";
 import { addressOf } from "./address.mjs";
@@ -16,7 +16,7 @@ const FLUSH_MS = 100,
 // Mumble's Reject.UsernameInUse, and WrongUserPW (the name is registered to another).
 const IN_USE = 5,
   ANOTHERS = 3;
-/** @typedef {(state: import("../status.mjs").State, text: string, people?: { id: string; name: string }[]) => void} OnStatus */
+/** @typedef {(state: import("../stvtf/status.mjs").State, text: string, people?: { id: string; name: string }[]) => void} OnStatus */
 /**
  * @typedef {{ key: string; anywhere?: boolean; name?: string; identities?: import("./certs.mjs").Identities; lookup?: import("./address.mjs").Lookup; connect?: () => import("node:stream").Duplex;
  *   fetch?: typeof fetch; pause?: (ms: number) => Promise<void>; print?: (line: string) => void }} Options

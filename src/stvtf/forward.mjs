@@ -4,7 +4,7 @@
 // server error (the site away or restarting), goes again every second until it is taken, saying
 // how long it waited, so stv.tf holds it to the tick of when it was said; what waited longer than
 // its delay is dropped. One refused otherwise (too many speakers, not well formed) is dropped.
-import { discard } from "./http.mjs";
+import { discard } from "../http.mjs";
 import { REFUSED } from "./status.mjs";
 
 // `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.

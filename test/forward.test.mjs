@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Forwarder } from "../src/forward.mjs";
+import { Forwarder } from "../src/stvtf/forward.mjs";
 import { fetchOf, tick, unread } from "./stand.mjs";
 
 /** A post's body, as the forwarder sends it. @typedef {{ invite?: string; steamid: string | null; discord: string; name: string; channel?: string; frames: string[]; delay: number; late: number }} Body */

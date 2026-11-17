@@ -1,6 +1,6 @@
 // `/stv join`: into the caller's voice channel, for the match its link names.
 import { ChannelType } from "discord.js";
-import { matchOf } from "../match.mjs";
+import { matchOf } from "../stvtf/match.mjs";
 import { noMentions, reply } from "./messages.mjs";
 
 /**
