@@ -91,7 +91,7 @@ export function startDiscord({ hosts, key, token, state = null, onLoginFailed, c
 
   client.on("interactionCreate", async i => {
     if (!i.isChatInputCommand() || i.commandName !== "stv") return;
-    await onCommand(i, joinOptions, sessions).catch(e => fault("/stv", e));
+    await onCommand(i, joinOptions, sessions).catch(e => fault("/stv", e, i.user.id));
   });
 
   // Someone came or went, or the bot was moved.
