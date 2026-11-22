@@ -32,7 +32,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       # Installs the linters pinned in mise.toml, for shell scripts, the Dockerfile and the workflows.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         with:
           # Pinned to the version stv.tf's CI uses: a later version could not be downloaded.
           version: 2026.11.3
