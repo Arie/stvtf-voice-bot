@@ -1,8 +1,9 @@
-// What the bot logs: a line when what it says of something changes, not each time it is so again.
+// The bot's log: a line is printed when a status changes, not each time the same status repeats.
 
 /**
- * A log of one thing (a channel, a stv.tf): a line is printed once, until another comes. Numbers
- * at a line's end (a count, a tick) do not make it another.
+ * A log for one subject (a channel, a stv.tf host). A line is not printed again until a
+ * different line has come. A number at the end of a line (a count, a tick) does not make it
+ * different.
  * @param {string} where @param {(line: string) => void} [print]
  */
 export function logOf(where, print = line => console.log(line)) {

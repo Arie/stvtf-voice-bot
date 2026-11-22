@@ -16,8 +16,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The checks run through script/test, which runs them all locally. The checkout keeps no
-# credentials. Actions are pinned by commit.
+# CI runs the checks through script/test, the same script that runs them locally. The checkout
+# keeps no credentials. Actions are pinned by commit.
 jobs:
   checks:
     name: checks, tests and audit
@@ -31,9 +31,9 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci --ignore-scripts
-      # The linters mise.toml pins: shell scripts, the Dockerfile and the workflows.
+      # Installs the linters pinned in mise.toml, for shell scripts, the Dockerfile and the workflows.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          # Pinned, as stv.tf's: a later one could not be fetched.
+          # Pinned to the version stv.tf's CI uses: a later version could not be downloaded.
           version: 2026.11.3
       - run: script/test -v

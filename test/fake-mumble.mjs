@@ -47,7 +47,7 @@ export function welcome(server) {
   server.send("ServerSync", { session: 2, welcome_text: "hi" });
 }
 
-/** That, and the server moving the client to Team Comms as it asked. */
+/** As `welcome`, and then the server moves the client to Team Comms as it asked. */
 /** @param {Server} server */
 export function welcomeIn(server) {
   welcome(server);

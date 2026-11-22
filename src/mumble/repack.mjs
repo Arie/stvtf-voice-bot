@@ -5,7 +5,7 @@
 // and passes whole.
 import { frameMs } from "./voice.mjs";
 
-/** A frame's length where a packet says it. @returns {[number, number] | null} It, and where it ends. */
+/** Reads a frame's length from a packet at `at`. @returns {[number, number] | null} The length, and where it ends. */
 function readLength(/** @type {Buffer} */ b, /** @type {number} */ at) {
   if (at >= b.length) return null;
   if (b[at] < 252) return [b[at], at + 1];
@@ -48,9 +48,10 @@ function framesOfCode3(p) {
 }
 
 /**
- * Frames of lengths given before them, the last's what is left.
+ * Frame lengths of a VBR packet: each is given before the frames, except the last, which is
+ * what is left.
  * @param {Buffer} p @param {number} at @param {number} end @param {number} count
- * @returns {{ lengths: number[]; at: number } | null} Them, and where the frames start.
+ * @returns {{ lengths: number[]; at: number } | null} The lengths, and where the frames start.
  */
 function vbrLengths(p, at, end, count) {
   const lengths = [];
@@ -64,7 +65,7 @@ function vbrLengths(p, at, end, count) {
   return { lengths, at };
 }
 
-/** Frames of one length. @param {number} at @param {number} end @param {number} count */
+/** Frame lengths of a CBR packet: all the same. @param {number} at @param {number} end @param {number} count */
 function cbrLengths(at, end, count) {
   if ((end - at) % count) return null;
   return { lengths: Array(count).fill((end - at) / count), at };
@@ -72,7 +73,7 @@ function cbrLengths(at, end, count) {
 
 /**
  * How much padding a packet of many frames has, and where its frames' lengths start.
- * @param {Buffer} p @returns {{ at: number; pad: number } | null} None for one cut short.
+ * @param {Buffer} p @returns {{ at: number; pad: number } | null} Null for a packet cut short.
  */
 function paddingOf(p) {
   let [at, pad] = [2, 0];
@@ -84,7 +85,7 @@ function paddingOf(p) {
   }
 }
 
-/** Frames of one kind as one packet. @param {number} kind The kind's byte, less its two last bits. @param {Buffer[]} frames */
+/** Packs frames of one kind into one packet. @param {number} kind The first byte, without its low two bits. @param {Buffer[]} frames */
 function packFrames(kind, frames) {
   if (frames.length === 1) return Buffer.concat([Buffer.from([kind]), frames[0]]);
   const lengths = frames.slice(0, -1).flatMap(f => writeLength(f.length));
@@ -102,7 +103,8 @@ export class Repacker20ms {
     const out = [];
     const kind = opus[0] & 0xfc;
     for (const frame of framesOf(opus)) {
-      // Another kind of frame cannot share a packet with what waits: that goes first, as it is.
+      // A frame of another kind cannot share a packet with the waiting frames: those go first, as
+      // they are.
       if (this.waiting.length && kind !== this.kind) out.push(...this.flush());
       this.kind = kind;
       this.waiting.push(Buffer.from(frame));
@@ -111,7 +113,7 @@ export class Repacker20ms {
     return out;
   }
 
-  /** What waits, short of 20 ms as it may be: at the end of an utterance. @returns {Buffer[]} */
+  /** Packs what waits, even if it is short of 20 ms: called at the end of an utterance. @returns {Buffer[]} */
   flush() {
     if (!this.waiting.length) return [];
     const out = packFrames(this.kind, this.waiting);

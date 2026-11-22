@@ -1,5 +1,5 @@
-// Who a Discord user is on Steam, as stv.tf knows from their link (GET /voice/who): kept once
-// known, asked again in a while for those not linked (they may link meanwhile).
+// Looks up the Steam account a Discord user linked on stv.tf (GET /voice/who). A known account
+// is kept. For someone not linked it asks again after a minute, because they may link meanwhile.
 
 import { discard } from "../http.mjs";
 
@@ -20,7 +20,7 @@ export class Who {
   lookup(discord) {
     const k = this.known.get(discord);
     if (k && (k.steamid || this.o.now() - k.at < ASK_AGAIN_MS)) return Promise.resolve(k.steamid);
-    // One question at a time about someone: every frame of theirs asks.
+    // One request at a time per person: every frame of theirs asks.
     let asking = this.asking.get(discord);
     if (!asking) {
       asking = this.#ask(discord).finally(() => this.asking.delete(discord));

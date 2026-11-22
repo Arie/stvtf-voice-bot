@@ -159,7 +159,7 @@ test("what waits of a speaker goes onto their own last post while they talk on, 
   say(speaker);
   await tick();
   for (const who of [speaker, other, speaker]) say(who);
-  // A silence: what comes after it is not said right after what came before.
+  // A silence longer than TOGETHER_MS: what comes after it goes in a post of its own.
   c.t += 300;
   say(speaker);
   for (let n = 0; n < 4; n++) {

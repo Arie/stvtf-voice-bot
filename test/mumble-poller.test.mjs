@@ -80,7 +80,7 @@ test("a channel wanted is joined, with where its voice goes, and the page is tol
       channel: "mumble:mumble.example:Team_A",
     },
   ]);
-  // Asked again, with what it has: nothing new, nothing done.
+  // Asked again with the version it has: nothing changed, so nothing is started.
   await poller.poll();
   assert.equal(w.started.length, 1);
 });
@@ -151,7 +151,7 @@ test("whatever stv.tf answers, it keeps asking", async () => {
   for (const answer of [null, { jobs: {} }, { jobs: [{ match: "m1" }] }, { jobs: [null] }, "x"]) {
     const w = world();
     w.fetch = fetchOf(async () => ({ ok: true, status: 200, json: async () => answer }));
-    // As the real one does with a job of no channel.
+    // Throws for a job without a channel, as the real `start` does.
     /** @type {World["start"]} */
     const start = (j, onStatus) => (j.channel.replace(/x/, ""), w.start(j, onStatus));
     const poller = new JobPoller({ origin: "https://stv.tf", key: "k", fetch: w.fetch, start, print: w.print });

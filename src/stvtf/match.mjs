@@ -1,13 +1,13 @@
-// Where a match's voice goes, from a link someone gave: only on the hosts given (`STVTF_HOSTS`),
-// so the key never goes anywhere else.
+// Works out where a match's voice goes from a link someone gave. Only links on the configured
+// hosts (`STVTF_HOSTS`) are accepted, so the key never goes anywhere else.
 
 const LOCAL = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 /** A host's origin: a local one over plain http. @param {string} host */
 export const originOf = host => `${LOCAL.test(host) ? "http" : "https"}://${host}`;
 
-// The first host: where people link their Steam account, and so where who they are is asked,
-// whichever region a match is on.
+// The first host is where people link their Steam account, so the bot asks there who someone
+// is, whichever region a match is on.
 /** @param {string[]} hosts */
 export const homeOf = hosts => originOf(hosts[0]);
 
@@ -40,7 +40,8 @@ export function matchOf(link, hosts) {
   const m = url.pathname.match(/^\/([wr])\/([0-9a-z]{1,64})(\/|$)/);
   if (!m) return null;
   const page = `${url.origin}/${m[1]}/${m[2]}/`;
-  // The invite stv.tf gave whoever started the match, or a caster: no voice comes in without it.
+  // The invite stv.tf gave to whoever started the match, or to a caster. stv.tf takes no voice
+  // without it.
   const invite = url.searchParams.get("voice");
   return {
     voice: `${page}voice`,

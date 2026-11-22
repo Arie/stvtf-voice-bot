@@ -1,13 +1,13 @@
 // The bot in one voice channel: it receives each speaker's Opus as Discord sends it and hands it,
-// with who they are on Steam, to the match's forwarder. It leaves when told, when moved, when the
-// channel is empty of people, or when the match is gone.
+// with who they are on Steam, to the match's forwarder. It leaves when told, when moved, when no
+// people are left in the channel, or when the match is gone.
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import { Forwarder } from "../stvtf/forward.mjs";
 import { logOf } from "../log.mjs";
 import { STATE, postStatus } from "../stvtf/status.mjs";
 
-// How often what is batched is flushed, how long joining may take, how often stv.tf is told how
-// it goes and who is here, and how long a lost connection has to come back by itself.
+// How often batched frames are flushed, how long joining may take, how often stv.tf is told the
+// status and who is here, and how long a lost connection has to reconnect by itself.
 const FLUSH_MS = 100,
   JOIN_MS = 30_000,
   STATUS_MS = 10_000,
@@ -36,9 +36,9 @@ export class DiscordSession {
       onAnswer: answer => this.log(answer),
     });
     this.voice = o.voice ?? { joinVoiceChannel, entersState };
-    /** What stv.tf answers its posts, or why they failed: logged when it changes. */
+    /** Logs what stv.tf answers to voice posts, or why they failed, when that changes. */
     this.log = logOf(`${o.channel.guild.name} → ${o.match.page}`, o.print);
-    /** That it came into the channel, and why it left. */
+    /** Logs that the bot joined the channel, and why it left. */
     this.logStatus = logOf(`${o.channel.guild.name} → ${o.match.page}`, o.print);
     /** @type {Set<string>} Discord user ids heard. */
     this.heard = new Set();
@@ -51,7 +51,7 @@ export class DiscordSession {
     this.leaving = null;
   }
 
-  /** How far the match's stream is behind, in seconds: for what is said from now on. */
+  /** The match's stream delay in seconds. A change applies to what is said from then on. */
   get delay() {
     return this.forwarder.delay;
   }
@@ -69,7 +69,7 @@ export class DiscordSession {
       selfDeaf: false,
       selfMute: true,
     });
-    // Unheard, it would end the process: it only ends this channel.
+    // Without a listener an "error" event would end the process. It only ends this session.
     this.connection.on("error", () => this.leave("voice error"));
     await this.voice.entersState(this.connection, VoiceConnectionStatus.Ready, JOIN_MS);
     this.inChannel = true;
@@ -81,7 +81,7 @@ export class DiscordSession {
     this.reporting = setInterval(() => this.reportStatus(), STATUS_MS);
   }
 
-  /** Lost a moment (a network hiccup, a voice server moved) it reconnects by itself; else it is gone. */
+  /** A connection lost for a moment (a network hiccup, a voice server move) reconnects by itself; if not, the bot leaves. */
   async #disconnected() {
     const connection = /** @type {import("@discordjs/voice").VoiceConnection} */ (this.connection);
     try {
@@ -105,7 +105,8 @@ export class DiscordSession {
 
   /** @param {string} id @param {Buffer} opus */
   #frame(id, opus) {
-    // Who they are is known from their first frame on; while it is asked, theirs wait in order.
+    // A speaker's Steam id is asked for at their first frame. Until it is known, their frames wait
+    // in order.
     const before = this.frames.get(id) ?? Promise.resolve();
     const then = before.then(async () => {
       const steamid = this.o.who.peek(id) ?? (await this.o.who.lookup(id));
@@ -123,14 +124,15 @@ export class DiscordSession {
     return out;
   }
 
-  /** Tells stv.tf how it goes here and who is in the channel, so they can be put on players. */
+  /** Tells stv.tf the status and who is in the channel, so the page can match them to players. */
   reportStatus() {
     if (this.gone) return;
     const people = [...this.channel.members.values()]
       .filter(m => !m.user.bot)
       .map(m => ({ id: m.id, name: m.displayName }));
     const status = `${this.channel.name} · ${people.length}`;
-    // A channel nobody talks in hears of a match gone here: no voice post is answered so.
+    // A channel where nobody talks sends no voice posts, so this answer is how it learns that the
+    // match is gone.
     postStatus(this.#statusTarget(), {
       kind: "discord",
       state: STATE.in,
@@ -142,7 +144,7 @@ export class DiscordSession {
     });
   }
 
-  /** Where stv.tf is told how it goes. */
+  /** Where the status is posted, and with which key and invite. */
   #statusTarget() {
     return { page: this.o.match.page, key: this.o.key, invite: this.o.match.invite, fetch: this.o.fetch };
   }
@@ -152,14 +154,14 @@ export class DiscordSession {
    * @param {{ id: string; channelId: string | null }} old @param {{ id: string; channelId: string | null }} now
    */
   update(old, now) {
-    // The bot dragged elsewhere would record there, unsaid.
+    // Moved to another channel, the bot would record there without having said so: it leaves.
     if (now.id === this.channel.guild.members.me?.id && now.channelId !== this.channel.id)
       return this.leave(now.channelId ? "moved" : "disconnected");
-    // Only who is here matters: not a mute, nor another channel.
+    // Only someone entering or leaving this channel matters: not a mute, nor a change elsewhere.
     if (old.channelId === now.channelId || (old.channelId !== this.channel.id && now.channelId !== this.channel.id))
       return;
     if (!this.hasPeople()) return this.leave("channel empty");
-    // Someone came or went: stv.tf hears who is here now.
+    // Someone came or went: tell stv.tf who is here now.
     this.reportStatus();
   }
 
@@ -168,7 +170,7 @@ export class DiscordSession {
     return [...this.channel.members.values()].some(m => !m.user.bot);
   }
 
-  /** @param {string} why @returns {Promise<void>} Once stv.tf is told, what was said is posted, and the channel told. */
+  /** @param {string} why @returns {Promise<void>} Once stv.tf is told, the remaining voice is posted and the channel is told. */
   leave(why) {
     if (this.leaving) return this.leaving;
     this.gone = true;

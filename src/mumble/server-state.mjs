@@ -1,5 +1,5 @@
-// What the bot knows of a Mumble server: its people and channels, as the server says. Kept short
-// and few: more than any real server has is a server to leave.
+// What the bot knows of a Mumble server: its users and channels, as the server reports them.
+// Name lengths and counts are capped: a server with more than any real server has is one to leave.
 
 const MAX_NAME = 128,
   MAX_USERS = 5000,
@@ -13,7 +13,7 @@ export class ServerState {
   /** @type {Map<number, string>} Channels' names by id. */
   channels = new Map();
 
-  /** @param {(why: string) => void} onOverflow Told when the server has more than any real one. */
+  /** @param {(why: string) => void} onOverflow Called when the server has more users or channels than the cap. */
   constructor(onOverflow) {
     this.onOverflow = onOverflow;
   }
@@ -31,7 +31,7 @@ export class ServerState {
     if (m.channel_id != null) this.channels.delete(m.channel_id);
   }
 
-  /** @param {import("./proto.mjs").UserState} m @returns {Person | null} Who it is now, if kept. */
+  /** @param {import("./proto.mjs").UserState} m @returns {Person | null} The user as now known, or null if not kept. */
   applyUserState(m) {
     if (m.session == null) return null;
     if (!this.users.has(m.session) && this.users.size >= MAX_USERS) {
@@ -41,8 +41,8 @@ export class ServerState {
     const u = this.users.get(m.session) ?? { session: m.session, name: "", channel: 0, id: "" };
     if (m.name != null) u.name = m.name.slice(0, MAX_NAME);
     if (m.channel_id != null) u.channel = m.channel_id;
-    // Who they are from one visit to the next: their certificate, the same on any server;
-    // else as registered on this one.
+    // An id that stays the same from one visit to the next: their certificate hash, which is the
+    // same on any server; otherwise their registered user id on this server.
     if (m.hash) u.id = `cert:${m.hash.slice(0, MAX_NAME)}`;
     else if (m.user_id != null && !u.id.startsWith("cert:")) u.id = `user:${m.user_id}`;
     this.users.set(m.session, u);
@@ -60,7 +60,7 @@ export class ServerState {
     return [...this.channels].find(([, n]) => n.toLowerCase() === want)?.[0];
   }
 
-  /** Those in `channel`, `self` aside. @param {number} channel @param {number} self @returns {Person[]} */
+  /** The users in `channel`, except the session `self`. @param {number} channel @param {number} self @returns {Person[]} */
   peopleIn(channel, self) {
     return [...this.users.values()].filter(u => u.channel === channel && u.session !== self);
   }

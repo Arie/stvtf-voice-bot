@@ -1,6 +1,6 @@
-// The bot in one Mumble channel for one match: every speaker's voice regrouped into packets of
-// 20 ms and passed to stv.tf, each known by who they are on that server (registered, or their
-// certificate), so the match's page can put them on a player and keep them there.
+// The bot in one Mumble channel for one match: every speaker's voice is regrouped into packets
+// of 20 ms and passed to stv.tf. Each speaker is identified by their certificate, or else by their
+// registration on that server, so the match's page can assign them to a player and keep them there.
 import { Forwarder } from "../stvtf/forward.mjs";
 import { logOf } from "../log.mjs";
 import { STATE } from "../stvtf/status.mjs";
@@ -51,7 +51,8 @@ class MumbleSession {
   constructor(job, onStatus, o) {
     this.job = job;
     this.o = o;
-    // How it goes, and what stv.tf answers its posts: each logged when it changes.
+    // Two logs: the session's status, and what stv.tf answers to voice posts. Each prints a line
+    // when it changes.
     const where = `${channelOf(job)} → ${job.page}`;
     this.logStatus = logOf(where, o.print);
     /** @type {OnStatus} */
@@ -97,7 +98,8 @@ class MumbleSession {
         await (this.o.pause ?? (ms => new Promise(r => setTimeout(r, ms))))(200);
       }
       this.client?.leave(why);
-      // A join under way ends once its connection is closed; one not yet begun is not begun.
+      // A join in progress ends once its connection is closed. One that has not begun will not
+      // begin, because `gone` is set.
       await this.started;
       await this.client?.closed;
     })();
@@ -109,7 +111,7 @@ class MumbleSession {
     return voiceId(this.job.host, p);
   }
 
-  /** How it goes, and who is in the channel: told to stv.tf. */
+  /** Tells stv.tf the status and who is in the channel. */
   #reportStatus() {
     const there = this.client?.people() ?? [];
     this.onStatus(
@@ -123,7 +125,7 @@ class MumbleSession {
     const { job } = this;
     try {
       this.address = await addressOf(job.host, { lookup: this.o.lookup, anywhere: this.o.anywhere });
-      // By its address: a server under two names is one.
+      // Keyed by address, so a server reached under two names counts as one.
       this.identity = this.o.identities?.take(`${this.address}:${job.port}`) ?? null;
       const client = await this.#join();
       if (!client) return;
@@ -137,7 +139,7 @@ class MumbleSession {
       );
     } catch (e) {
       this.gone = true;
-      // Told to leave, it has nothing more to say: another may be there by now.
+      // If it was told to leave it reports nothing: another session may have taken its place by now.
       if (!this.closing) this.onStatus(STATE.failed, `Could not join: ${/** @type {Error} */ (e).message}`, []);
     } finally {
       // Its certificate is free once the connection is closed.
@@ -146,7 +148,7 @@ class MumbleSession {
     }
   }
 
-  /** In the channel: by its certificate's name, else its match's, else that with a letter after. */
+  /** Joins the channel by the certificate's name; if that name is taken, by the match's; then that with a letter after. */
   async #join() {
     const own = this.o.name ?? nameOf(this.job);
     const names = [...(this.identity ? [this.identity.name] : []), own, `${own}-b`, `${own}-c`];
@@ -179,7 +181,7 @@ class MumbleSession {
       connect: this.o.connect,
       onVoice: v => this.#voice(v),
       onGone: why => {
-        // Only one that was in: a join that fails says so itself.
+        // Only for a client that was in the channel: a failed join is reported by #start.
         if (this.gone || !c.inChannel) return;
         this.gone = true;
         this.timers.forEach(clearInterval);

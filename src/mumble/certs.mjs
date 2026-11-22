@@ -1,8 +1,8 @@
-// The certificates the bot signs in to Mumble servers by: one per bot on a server at once, the
-// same every time, listed at `PAGE`.
+// The certificates the bot signs in to Mumble servers with. Each connection to one server uses
+// a different certificate, and they are the same every time. They are listed at `PAGE`.
 import { X509Certificate, createPrivateKey } from "node:crypto";
 
-/** Where they are listed. */
+/** The page that lists the certificates. */
 export const PAGE = "https://stv.tf/mumble";
 
 /** A certificate, its key (PEM) and its name (CN). @typedef {{ cert: string; key: string; name: string }} Identity */
@@ -14,7 +14,7 @@ const blocks = (pem, what) =>
 /**
  * `bundle`: base64 of certificates, then their keys (PEM), in the same order.
  * @param {string} bundle @returns {Identity[]}
- * @throws {Error} For keys that are not those certificates'.
+ * @throws {Error} If a key does not belong to its certificate, the counts differ or a certificate has no name.
  */
 export function identitiesOf(bundle) {
   const pem = Buffer.from(bundle, "base64").toString("latin1");
@@ -30,9 +30,9 @@ export function identitiesOf(bundle) {
   });
 }
 
-/** Each identity on a server once at a time. */
+/** Hands out identities, so that each is in use on a server by one connection at a time. */
 export class Identities {
-  /** @type {Map<string, Set<number>>} By server: which are there. */
+  /** @type {Map<string, Set<number>>} By server: the indexes of the identities in use there. */
   #taken = new Map();
 
   /** @param {Identity[]} all */
@@ -41,7 +41,8 @@ export class Identities {
   }
 
   /**
-   * The first free on `server` (host:port), until `release`; none when all are taken.
+   * The first identity not in use on `server` (address:port), taken until `release` is called;
+   * null when all are taken.
    * @param {string} server @returns {(Identity & { release: () => void }) | null}
    */
   take(server) {

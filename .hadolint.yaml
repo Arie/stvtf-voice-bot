@@ -1,2 +1,3 @@
-# Infos (such as DL3066, a user by name: the image creates it) don't fail the check.
+# Info-level findings don't fail the check (such as DL3066, about a user given by name: the base
+# image creates that user).
 failure-threshold: warning

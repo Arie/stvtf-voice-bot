@@ -1,7 +1,7 @@
-// The Mumble channels stv.tf wants the bot in: asked for on a match's page there, by whoever
-// has a say in its voice. The bot keeps a question open with stv.tf (`GET /voice/mumble`), which
-// answers the moment something changes, so a channel is joined as it is asked for; and tells it
-// how each goes (`POST <page>voice-status`), for the page to show.
+// The Mumble channels stv.tf wants the bot in. They are requested on a match's page there, by
+// whoever may manage its voice. The bot long-polls stv.tf (`GET /voice/mumble`), which answers
+// the moment something changes, so a channel is joined as soon as it is requested. The bot
+// reports each channel's status (`POST <page>voice-status`), for the page to show.
 import { setTimeout as sleep } from "node:timers/promises";
 import { discard } from "../http.mjs";
 import { logOf } from "../log.mjs";
@@ -10,22 +10,23 @@ import { channelOf, isJob } from "./job.mjs";
 
 /** @typedef {import("./job.mjs").Job} Job */
 
-// How long stv.tf may keep a question open, and how long to wait after it did not answer.
+// How long stv.tf may hold a long poll open, and how long to wait after it did not answer.
 const ASK_MS = 40_000,
   RETRY_MS = 3000,
-  // A stv.tf that will not have the key: a wrong one stays wrong.
+  // How long to wait after stv.tf refused the key: a wrong key stays wrong.
   REFUSED_MS = 60_000;
 
 /** @typedef {{ delay: number; leave: (why: string) => Promise<void> | void }} Session */
 /**
- * A job seen to: its session, once started (after the one before it in that match has closed).
+ * A job being handled, with its session once started. It starts after the previous session for
+ * the same match and channel slot has closed.
  * @typedef {{ connectionKey: string; job: Job; session: Session | null; left: boolean; ready: Promise<void> }} Entry
  */
 
-/** Which of what is wanted a job is: its match, and which of that match's channels. @param {Job} j */
+/** Identifies a job: its match, and which of that match's channels (the slot). @param {Job} j */
 const keyOf = j => `${j.match}#${j.slot ?? ""}`;
 
-/** What makes a job another one: all but its delay. @param {Job} j */
+/** What makes a job need a new connection when it changes: everything but its delay. @param {Job} j */
 const connectionKeyOf = j => [j.host, j.port, j.password, j.channel, j.invite, j.asked ?? 0].join("\n");
 
 export class JobPoller {
@@ -33,7 +34,7 @@ export class JobPoller {
    * @param {{
    *   origin: string; key: string; fetch?: typeof fetch; print?: (line: string) => void;
    *   start: (job: Job, onStatus: import("./session.mjs").OnStatus) => Session | null;
-   * }} o `start` joins a channel (or says why not, and gives none).
+   * }} o `start` joins a channel (or reports why not, and returns null).
    */
   constructor(o) {
     this.o = { fetch, ...o };
@@ -42,21 +43,21 @@ export class JobPoller {
     this.version = 0;
     /** @type {Map<string, Entry>} By match and which of its channels (`keyOf`). */
     this.sessions = new Map();
-    /** @type {Map<string, Promise<void>>} By the same: the last session left, until it is closed. */
+    /** @type {Map<string, Promise<void>>} By the same key: the session last left, until its connection is closed. */
     this.closing = new Map();
     /** @type {Promise<unknown>[]} */
     this.statusPosts = [];
     this.stopped = false;
-    /** Ends the question open with stv.tf, and the wait before the next, once stopped. */
+    /** Aborts the open long poll, and the wait before the next one, when stopped. */
     this.aborting = new AbortController();
     /** Whether stv.tf last refused the key. */
     this.refused = false;
   }
 
-  /** Asks what is wanted (waiting for a change, once it knows how things stand) and sees to it. */
+  /** Asks what is wanted and acts on it. Once it has a version, stv.tf holds the request until something changes. */
   async poll() {
     const jobs = await this.#ask();
-    // Stopped meanwhile: what it answers is for nobody.
+    // Stopped meanwhile: the answer is ignored.
     if (!jobs || this.stopped) return false;
     for (const [key, had] of this.sessions) {
       const now = jobs.find(j => keyOf(j) === key);
@@ -92,7 +93,7 @@ export class JobPoller {
       }
       wanted = await r.json();
     } catch (e) {
-      // Not answering is not being told to leave.
+      // No answer does not mean the bot must leave: its sessions stay.
       if (!this.stopped) this.log(`no answer (${/** @type {Error} */ (e).message})`);
       return null;
     }
@@ -108,7 +109,7 @@ export class JobPoller {
     }));
   }
 
-  /** Joins a job's channel, once the one before it in that match is out. @param {Job} job */
+  /** Joins a job's channel, once the previous session for the same match and slot has closed. @param {Job} job */
   #startJob(job) {
     /** @type {import("./session.mjs").OnStatus} */
     const onStatus = (state, text, people) =>
@@ -122,14 +123,14 @@ export class JobPoller {
     const entry = { connectionKey: connectionKeyOf(job), job, session: null, left: false, ready: Promise.resolve() };
     const start = () => {
       if (entry.left) return;
-      // One that would not be joined is not tried again until it is asked for anew.
+      // A channel that could not be joined is not tried again until it is requested anew.
       try {
         entry.session = this.o.start(entry.job, onStatus);
       } catch {
         onStatus(STATE.failed, "Could not join", []);
       }
     };
-    // The one before signs in by the same name: this one goes in once it is out.
+    // The previous session signs in with the same name: this one starts once that one has closed.
     const before = this.closing.get(keyOf(job));
     if (before) entry.ready = before.then(start);
     else start();

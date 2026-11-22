@@ -1,6 +1,6 @@
 // The bot in Discord: `/stv join` brings it into the caller's voice channel, where it says it is
-// recording and passes what is said to the match on stv.tf the link names, as the speakers'
-// players (their Steam accounts, linked through Discord on stv.tf). One channel per server.
+// recording and passes what is said to the stv.tf match named in the link. Each speaker is matched
+// to a player by the Steam account they linked to Discord on stv.tf. One channel per server.
 import { Client, GatewayIntentBits } from "discord.js";
 import { fault } from "../fault.mjs";
 import { homeOf } from "../stvtf/match.mjs";
@@ -14,7 +14,7 @@ import { Who } from "./who.mjs";
 const NICK = "stv.tf ● recording";
 
 /**
- * Where to ask who someone is, by the URL to ask at: one Who for each stv.tf.
+ * Returns the Who that asks at a given URL: one Who is kept for each stv.tf origin.
  * @param {string} key @returns {(url: string) => Who}
  */
 function whoCache(key) {
@@ -53,16 +53,17 @@ const newClient = () => new Client({ intents: [GatewayIntentBits.Guilds, Gateway
 
 /**
  * Signs in to Discord with `token` and takes `/stv` commands, for matches on `hosts` (voice goes
- * there with `key`); `onLoginFailed` is told if Discord will not have the token. Its `stop` leaves
- * every channel, saying nothing there (it goes back into them when started again), and signs out.
+ * there with `key`); `onLoginFailed` is called if Discord rejects the token. Its `stop` leaves
+ * every channel and signs out. With `state` set it says nothing in the channels, because it
+ * rejoins them when started again.
  * @param {{ hosts: string[]; key: string; token: string; state?: string | null; onLoginFailed: (e: Error) => void; client?: Client }} o
- *   `state`: the file the channels it is in are kept in, to go back into after a restart;
+ *   `state`: the file that lists the channels it is in, so it rejoins them after a restart;
  *   `client` is for tests.
  * @returns {{ stop: (why: string) => Promise<void> }}
  */
 export function startDiscord({ hosts, key, token, state = null, onLoginFailed, client = newClient() }) {
   const kept = new Kept(state);
-  /** @type {Map<string, DiscordSession>} The bot in a channel, by server. */
+  /** @type {Map<string, DiscordSession>} The bot's session in each server, by server id. */
   const sessions = new Map();
   /** @type {Parameters<typeof joinCommand>[1]} */
   const joinOptions = {
@@ -72,19 +73,19 @@ export function startDiscord({ hosts, key, token, state = null, onLoginFailed, c
     defaultDelay: DEFAULT_DELAY,
     sessions,
     kept,
-    // Servers the bot is on its way into a channel of.
+    // Servers where a join is in progress.
     joining: new Set(),
     whoFor: whoCache(key),
     makeSession: o => new DiscordSession(o),
   };
 
-  // Unheard, an error would end the process; the client reconnects by itself.
+  // Without a listener an "error" event would end the process. The client reconnects by itself.
   client.on("error", e => fault("Discord", e));
 
   client.once("clientReady", async () => {
     await client.application?.commands.set([command.toJSON()]).catch(e => fault("commands not set", e));
     console.log(`stvtf-voice-bot: ready as ${client.user?.tag}, for ${hosts.join(", ")}`);
-    // Back into the channels it was in when it stopped.
+    // Rejoin the channels it was in when it stopped.
     for (const channel of kept.list()) await rejoin(client, joinOptions, channel);
     if (sessions.size) console.log(`stvtf-voice-bot: back in ${sessions.size} channels`);
   });

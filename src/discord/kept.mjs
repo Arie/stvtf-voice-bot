@@ -5,10 +5,10 @@ import { fault } from "../fault.mjs";
 /** A channel the bot is in: its server, the voice channel, the match's link as given, the delay. @typedef {{ guild: string; channel: string; link: string; delay: number }} KeptChannel */
 
 export class Kept {
-  /** @param {string | null} path Where they are kept; with none, in memory only. */
+  /** @param {string | null} path The file they are saved in; null keeps them in memory only. */
   constructor(path) {
     this.path = path;
-    /** Told to stop: what it leaves now it goes back into. */
+    /** Set when the bot is stopping: channels it leaves from then on stay saved, to rejoin. */
     this.stopping = false;
     /** @type {Map<string, KeptChannel>} By server. */
     this.channels = new Map();
@@ -16,7 +16,7 @@ export class Kept {
     try {
       for (const c of JSON.parse(readFileSync(path, "utf8"))) if (isKept(c)) this.channels.set(c.guild, c);
     } catch {
-      // None kept yet, or not readable: none to go back into.
+      // No file yet, or it cannot be read: there are no channels to rejoin.
     }
   }
 
@@ -31,7 +31,7 @@ export class Kept {
     this.#write();
   }
 
-  /** The bot left `guild`'s channel for good: not when it only stops. @param {string} guild */
+  /** Removes the channel of `guild`, which the bot left for good. Does nothing while it is stopping. @param {string} guild */
   forget(guild) {
     if (!this.stopping && this.channels.delete(guild)) this.#write();
   }

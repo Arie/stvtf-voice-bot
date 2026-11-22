@@ -1,14 +1,16 @@
-// Voice as a Mumble server passes it on (its older packet form, which it sends a client that
-// says it is of before 1.5): who talks, a sequence number, and one Opus packet, the last of an
-// utterance marked. Over the control connection it comes in UDPTunnel messages, as is.
+// Voice packets as a Mumble server passes them on, in the older format it sends to a client that
+// reports a version before 1.5: who talks, a sequence number and one Opus packet, with a flag on
+// the last packet of an utterance. Over the control connection they come unchanged inside
+// UDPTunnel messages.
 
-// The codec a packet's first byte names in its top three bits; Opus is the only one of today.
+// The codec is in the top three bits of a packet's first byte. Only Opus is still in use.
 const OPUS = 4;
-// In an Opus packet's length: the utterance ends with it.
+// A flag bit in the Opus packet's length field: the utterance ends with this packet.
 const LAST = 0x2000;
 
-// The kinds of Mumble's numbers by their first byte: below what, how many bytes follow, and what
-// of the first byte counts. From 0xf4 on, they are of another kind (negative, or 64 bits).
+// The forms of Mumble's variable-length numbers, by first byte: [the first byte is below this,
+// how many bytes follow, the mask for the value bits in the first byte]. From 0xf4 on they are
+// other forms (negative, or 64 bits), which are not read.
 const KINDS = [
   [0x80, 0, 0x7f],
   [0xc0, 1, 0x3f],
@@ -18,8 +20,9 @@ const KINDS = [
 ];
 
 /**
- * One of Mumble's own variable-length numbers (not protobuf's), of those that are not negative.
- * @param {Buffer} b @param {number} at @returns {[number, number] | null} It, and where it ends.
+ * Reads one of Mumble's own variable-length numbers (not protobuf's): only the forms that are
+ * not negative and at most 32 bits.
+ * @param {Buffer} b @param {number} at @returns {[number, number] | null} The number, and where it ends.
  */
 export function readMumbleVarint(b, at) {
   const first = b[at];
@@ -36,7 +39,7 @@ export function readMumbleVarint(b, at) {
 /**
  * @param {Buffer} packet What a UDPTunnel message holds.
  * @returns {{ target: number; session: number; sequence: number; opus: Buffer; last: boolean } | null}
- * None for what is no Opus voice (a ping, an old codec) or is cut short. `target`: 0 is talk to
+ * Null for what is not Opus voice (a ping, an old codec) or is cut short. `target`: 0 is talk to
  * the channel; 1 to 30 a whisper or shout; 31 the server's loopback.
  */
 export function parseVoice(packet) {
@@ -62,13 +65,14 @@ export function parseVoice(packet) {
 }
 
 /**
- * How many milliseconds of sound an Opus packet holds, from its first byte (and its second, for
- * one of many frames): 0 for none.
+ * How many milliseconds of sound an Opus packet holds, from its first byte (and its second,
+ * which holds the frame count of a code 3 packet): 0 for an empty packet.
  * @param {Buffer} opus
  */
 export function opusDuration(opus) {
   if (!opus.length) return 0;
-  // One frame; two (of a length, or two); or as many as the second byte says.
+  // By code (the low two bits): one frame; two frames (of equal or of different lengths); or as
+  // many as the second byte says.
   const frames = [1, 2, 2, (opus[1] ?? 0) & 0x3f][opus[0] & 3];
   return frameMs(opus[0]) * frames;
 }

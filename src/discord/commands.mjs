@@ -1,6 +1,6 @@
-// `/stv`: its subcommands, and those for the voice channel the bot is in (`leave`, `delay`).
-// Who may change what the bot does in a voice channel: those in it. Its voice is theirs, and a
-// delay of none sends it out live.
+// The `/stv` command with its subcommands, and the handlers for `leave` and `delay`. Only people
+// in the bot's voice channel may control it: the voice is theirs, and a delay of 0 sends it out
+// live.
 import { ChannelType, SlashCommandBuilder } from "discord.js";
 import { noMentions, reply } from "./messages.mjs";
 
@@ -45,8 +45,8 @@ export const mayControl = (callerChannel, botChannel) => callerChannel === botCh
 /** @typedef {import("discord.js").ChatInputCommandInteraction} Interaction */
 
 /**
- * The bot's session, if it is in a channel and whoever gave the command is in it too; else says
- * why not, and gives none.
+ * The bot's session, if it is in a channel and whoever gave the command is in it too. Otherwise
+ * replies why not and returns null.
  * @param {Interaction} i @param {DiscordSession | undefined} session @returns {Promise<DiscordSession | null>}
  */
 async function controlled(i, session) {
@@ -68,7 +68,7 @@ export async function leaveCommand(i, session) {
   await reply(i, "Left.");
 }
 
-/** `/stv delay`: said where it is recorded too, wherever the command was given. @param {Interaction} i @param {DiscordSession | undefined} session */
+/** `/stv delay`. The delay is also posted in the recorded channel if the command was given elsewhere. @param {Interaction} i @param {DiscordSession | undefined} session */
 export async function delayCommand(i, session) {
   const here = await controlled(i, session);
   if (!here) return;

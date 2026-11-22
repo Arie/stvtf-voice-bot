@@ -1,5 +1,5 @@
 // Mumble's control messages, as much of them as the bot needs: each a protobuf message, sent as
-// a type (2 bytes), a length (4 bytes) and the message. Field numbers are Mumble.proto's.
+// a type (2 bytes), a length (4 bytes) and the message. Field numbers are those of Mumble.proto.
 
 /** The message types by name, as the connection numbers them. */
 export const TYPES = {
@@ -137,10 +137,10 @@ export function decode(type, body) {
 }
 
 /**
- * A field's value, of the wire type given: a number, the bytes of one of a length, or none for
- * those of fixed length (none of ours).
+ * Reads a field's value by its wire type: a number (varint), the bytes of a length-delimited
+ * field, or undefined for a fixed-width field (the bot uses none).
  * @param {Buffer} body @param {number} at @param {number} wire
- * @returns {[number | Buffer | undefined, number]} It, and where it ends.
+ * @returns {[number | Buffer | undefined, number]} The value, and where it ends.
  */
 function readValue(body, at, wire) {
   switch (wire) {
@@ -160,7 +160,7 @@ function readValue(body, at, wire) {
   }
 }
 
-/** A value as its field has it; none if it is not of that kind. @param {string} kind @param {number | Buffer | undefined} v */
+/** A value converted to its field's kind; undefined if the wire value is not of that kind. @param {string} kind @param {number | Buffer | undefined} v */
 function fieldValue(kind, v) {
   if (kind.startsWith("string")) return Buffer.isBuffer(v) ? v.toString() : undefined;
   if (typeof v !== "number") return undefined;
@@ -175,8 +175,8 @@ export function frame(type, body) {
   return Buffer.concat([head, body]);
 }
 
-// The most a message is: more than any a server sends (its own limits are far lower) is a
-// broken stream, or one meant to be.
+// The largest message accepted. A server sends nothing this large (its own limits are far
+// lower), so a larger one means a broken stream, or a hostile one.
 const MAX_MESSAGE = 1 << 20;
 
 /** The connection's bytes cut into messages, as they come. */
@@ -184,7 +184,7 @@ export class Frames {
   /** @type {Buffer[]} What has come and is not yet a whole message. */
   chunks = [];
   size = 0;
-  /** How much the message at the front needs in all, once its head is in. */
+  /** The total size (head and body) of the message at the front, once its head has come; 0 before. */
   need = 0;
 
   /** @param {Buffer} chunk @returns {{ type: string; body: Buffer }[]} The messages now whole. */

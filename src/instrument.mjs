@@ -1,7 +1,7 @@
-// What goes wrong is told to Sentry (SENTRY_DSN, as the version Kamal runs; without a DSN nothing
-// is sent). Loaded before the bot (node --import), so an error of any module is seen. Only the
-// error and its stack: not what the bot prints, nor what it sends or holds in its variables,
-// which name channels and people.
+// Reports errors to Sentry (SENTRY_DSN; without a DSN nothing is sent), with the version Kamal
+// runs as the release. Loaded before the bot (node --import), so an error in any module is seen.
+// Only the error and its stack are sent: not what the bot prints, sends or holds in its
+// variables, because those name channels and people.
 import * as Sentry from "@sentry/node";
 
 Sentry.init({
@@ -17,7 +17,7 @@ Sentry.init({
   },
 });
 
-// The SDK sends its trace to stv.tf (`sentry-trace`), which continues it: each request a trace of
-// its own, not the process's one.
+// The SDK sends its trace to stv.tf (the `sentry-trace` header), which continues it. So each
+// request gets a trace of its own, instead of one trace for the whole process.
 const fetched = globalThis.fetch;
 globalThis.fetch = (...args) => Sentry.startNewTrace(() => fetched(...args));

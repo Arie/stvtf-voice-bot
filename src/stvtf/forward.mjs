@@ -1,28 +1,31 @@
-// A channel's voice on its way to a match: each speaker's Opus frames batched five at a time
+// Sends a channel's voice to a match: each speaker's Opus frames are batched five at a time
 // (100 ms) and posted in order. A match that is gone, a refused key or an expired invite stops it
-// (what waits is dropped). A post not answered, or answered that there is no stream yet or with a
-// server error (the site away or restarting), goes again every second until it is taken, saying
-// how long it waited, so stv.tf holds it to the tick of when it was said; what waited longer than
-// its delay is dropped. One refused otherwise (too many speakers, not well formed) is dropped.
+// (what waits is dropped). A post that gets no answer, or is answered with 409 (no stream yet) or
+// a server error (the site is down or restarting), is retried every second until it is accepted.
+// Each post says how long it waited, so stv.tf can place it at the tick when it was said. A post
+// that waited longer than the delay (and at least 5 s) is dropped. A post refused for another
+// reason (too many speakers, malformed) is dropped.
 import { discard } from "../http.mjs";
 import { REFUSED } from "./status.mjs";
 
-// `id` is who they are in the channel: a Discord user id, or a Mumble one; sent as `discord`.
+// `id` identifies the speaker in the channel: a Discord user id, or a Mumble id. It is sent as
+// `discord`.
 /** @typedef {{ steamid: string | null; id: string; name: string }} Speaker */
 
-// A speaker's frames on their way, since `at` (ms); the last of them came at `until`.
+// A speaker's frames waiting to be posted, since `at` (ms). The last of them came at `until`.
 /** @typedef {{ speaker: Speaker; frames: string[]; at: number; until: number }} Waiting */
 
-// Frames in a post as they come, and at most when posts are slow (what waits of a speaker goes
-// as one, while they talk on: no silence over `TOGETHER_MS` in it); the most posts waiting before
-// the oldest go; and how long a post may take.
+// BATCH: frames in a post normally. MAX_POST: the most frames in a post when posts are slow;
+// a speaker's waiting frames then go as one post, as long as no silence in it is longer than
+// TOGETHER_MS. MAX_WAITING: the most posts waiting before the oldest are dropped. POST_MS: how
+// long a post may take.
 const BATCH = 5,
   MAX_POST = 30,
   TOGETHER_MS = 200,
   MAX_WAITING = 100,
   POST_MS = 3000;
-// How long a post that failed waits to go again; and the least a post may wait, whatever its
-// delay (commentary has none).
+// How long a failed post waits before it is retried; and how long a post is kept at least,
+// even with a shorter delay (commentary has a delay of 0).
 const RETRY_MS = 1000,
   MIN_KEPT_MS = 5000;
 
@@ -33,14 +36,14 @@ export class Forwarder {
   constructor(o) {
     this.url = o.url;
     this.key = o.key;
-    /** How far the match's stream is behind the game where this channel talks, in seconds. */
+    /** How many seconds the match's stream is behind the game this channel talks in. */
     this.delay = o.delay;
-    /** The Discord voice channel these speakers are in: stv.tf takes those in one for a team. */
+    /** The voice channel these speakers are in (Discord's id, or a Mumble `channelOf`): stv.tf takes those in one as a team. */
     this.channel = o.channel;
     /** The match's invite, from the link. */
     this.invite = o.invite;
     this.fetch = o.fetch ?? fetch;
-    /** Told when it stops by itself: the match gone, the key or invite refused. */
+    /** Called when stv.tf stops it: the match is gone, or the key or invite is refused. */
     this.onStop = o.onStop ?? (() => {});
     this.onAnswer = o.onAnswer ?? (() => {});
     /** The clock (ms), and a wait on it. */
@@ -48,7 +51,7 @@ export class Forwarder {
     this.wait = o.wait ?? (ms => new Promise(r => setTimeout(r, ms)));
     /** Whether it takes no more frames. */
     this.stopped = false;
-    /** Whether a post is on its way: what comes meanwhile waits, a speaker's as one post. */
+    /** Whether a post is in flight. Frames that come meanwhile wait, merged into one post per speaker. */
     this.inFlight = false;
     this.sent = 0;
     /** @type {Map<string, { speaker: Speaker; frames: string[] }>} */
@@ -57,7 +60,7 @@ export class Forwarder {
     this.waiting = [];
     /** Whether a loop is posting what waits. */
     this.draining = false;
-    /** @type {Promise<void>} The loop's, resolved once nothing waits. */
+    /** @type {Promise<void>} The posting loop's promise: resolves once nothing waits. */
     this.posting = Promise.resolve();
   }
 
@@ -71,7 +74,7 @@ export class Forwarder {
     if (b.frames.length >= BATCH) this.#queue(speaker.id);
   }
 
-  /** What is batched goes now (a timer calls this every 100 ms); resolves once it is all posted. */
+  /** Queues what is batched now (a timer calls this every 100 ms). Resolves once it is all posted. */
   flush() {
     for (const id of [...this.batches.keys()]) this.#queue(id);
     return this.posting;
@@ -82,7 +85,8 @@ export class Forwarder {
     const b = this.batches.get(id);
     this.batches.delete(id);
     if (!b?.frames.length) return;
-    // Behind a slow post, onto what already waits of this speaker: their last, so in order.
+    // While a post is in flight, these frames are added to this speaker's last waiting post, which
+    // keeps them in order.
     const now = this.now();
     const last = this.waiting.findLast(w => w.speaker.id === id);
     const room = last && now - last.until <= TOGETHER_MS && last.frames.length + b.frames.length <= MAX_POST;
@@ -95,7 +99,8 @@ export class Forwarder {
     while (this.waiting.length > MAX_WAITING) this.waiting.shift();
     if (this.draining) return;
     this.draining = true;
-    // Begun after what is queued now: a flush's batches go as they are, not onto each other.
+    // The loop starts after everything queued in this turn, so the batches of one flush are queued
+    // as they are and not merged into each other.
     this.posting = Promise.resolve().then(() => this.#drain());
   }
 
@@ -112,12 +117,12 @@ export class Forwarder {
     const b = this.waiting.shift();
     if (!b) return;
     const late = this.now() - b.at;
-    // Its moment on the stream is past.
+    // Too late: its moment on the stream has passed.
     if (late > Math.max(this.delay * 1000, MIN_KEPT_MS)) return;
     this.inFlight = true;
     try {
       if (await this.#taken(b, late / 1000)) return;
-      // Stopped, nothing is waited for: it goes, and the rest with it.
+      // Once stopped there are no retries: this post is dropped, and the rest with it.
       if (this.stopped) return void (this.waiting = []);
       this.waiting.unshift(b);
       while (this.waiting.length > MAX_WAITING) this.waiting.shift();
@@ -127,7 +132,7 @@ export class Forwarder {
     }
   }
 
-  /** Posts `b`, said `late` seconds ago; whether that is the end of it: not to go again. @param {Waiting} b @param {number} late */
+  /** Posts `b`, said `late` seconds ago. Returns whether the post is done with (false: retry it). @param {Waiting} b @param {number} late */
   async #taken(b, late) {
     try {
       return await this.#answered(await this.fetch(this.url, this.#request(b, late)), b.frames.length);
@@ -159,8 +164,8 @@ export class Forwarder {
   }
 
   /**
-   * What stv.tf answered a post of `frames`: gone, refused, or how it went; whether that is the
-   * end of it (not so with no stream yet, or the site in trouble).
+   * Handles what stv.tf answered to a post of `frames` frames. Returns whether the post is done
+   * with: it is not when there is no stream yet (409) or the site has a server error.
    * @param {Response} r @param {number} frames
    */
   async #answered(r, frames) {

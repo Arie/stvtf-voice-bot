@@ -1,7 +1,7 @@
 // The bot on a Mumble server: signed in as a bot, in one channel, marked as recording (Mumble's
 // own flag: its clients show it, and say so when it starts), and handing on each speaker's Opus
 // as the server passes it. Voice comes over this one connection: the bot never sets up the
-// separate voice channel, so the server tunnels it here.
+// separate UDP voice connection, so the server tunnels voice here.
 import net from "node:net";
 import tls from "node:tls";
 import { decode, encode, frame, Frames } from "./proto.mjs";
@@ -11,16 +11,17 @@ import { parseVoice } from "./voice.mjs";
 /** @typedef {import("./proto.mjs").Messages} Messages */
 /** @typedef {import("./server-state.mjs").Person} Person */
 
-// What the bot says it is: of before 1.5, so voice comes in the older packet form.
+// The version the bot reports: 1.4.0, before 1.5, so voice comes in the older packet format.
 const VERSION = (1 << 16) | (4 << 8);
-// A bot, to the server: not counted among its people.
+// The client type for a bot: the server does not count it among its users.
 const BOT = 1;
 // How often it pings (a server drops a client silent for 30 s), and how long signing in may take.
 const PING_MS = 15_000,
   JOIN_MS = 15_000;
 
 /**
- * Who someone on the server at `host` is to stv.tf: by their certificate, else as known there.
+ * The id stv.tf knows someone on the server at `host` by: their certificate hash, otherwise
+ * their id on that server.
  * @param {string} host @param {{ id: string; session: number }} p
  */
 export function voiceId(host, p) {
@@ -29,8 +30,9 @@ export function voiceId(host, p) {
 }
 
 /**
- * How to reach the server: at the address checked (not its name, which could be looked up anew),
- * with its name for TLS. Not verified: Mumble servers are mostly self-signed.
+ * How to connect to the server: at the address that was checked (not by its name, which a second
+ * lookup could resolve differently), with its name for TLS. The server's certificate is not
+ * verified: Mumble servers are mostly self-signed.
  * @param {{ host: string; address?: string; port?: number; cert?: string; key?: string }} o
  */
 export const tlsOptions = o => ({
@@ -42,7 +44,7 @@ export const tlsOptions = o => ({
   key: o.key,
 });
 
-/** Calls `f` every `ms`, keeping the process going no longer: returns how to stop. @param {() => void} f @param {number} ms */
+/** Calls `f` every `ms`, without keeping the process alive. Returns a function that stops it. @param {() => void} f @param {number} ms */
 function repeatUnref(f, ms) {
   const timer = setInterval(f, ms).unref();
   return () => clearInterval(timer);
@@ -51,7 +53,7 @@ function repeatUnref(f, ms) {
 export class MumbleClient {
   /** @type {(() => void) | null} Set while it waits for the server to move it to its channel. */
   #onMovedIn = null;
-  /** Ends join() once in the channel, or with why not. */
+  /** Resolves join() once in the channel; `#rejectJoin` rejects it with why not. */
   #resolveJoin = () => {};
   /** @type {(why: string, type?: number) => void} */
   #rejectJoin = () => {};
@@ -65,7 +67,7 @@ export class MumbleClient {
    *   onGone?: (why: string) => void; onText?: (from: Person | undefined, text: string) => void;
    *   connect?: () => import("node:stream").Duplex; every?: (f: () => void, ms: number) => () => void;
    *   cert?: string; key?: string;
-   * }} o `channel` is a channel's name, whatever its case; `address`, where `host` is.
+   * }} o `channel` is a channel's name, in any case; `address` is the IP address of `host`.
    */
   constructor(o) {
     this.o = o;
@@ -85,13 +87,13 @@ export class MumbleClient {
    */
   join() {
     return new Promise((resolve, reject) => {
-      // Neither timer keeps the process going by itself.
+      // Neither this timer nor the ping timer keeps the process alive.
       const timer = setTimeout(() => this.#rejectJoin("timed out"), JOIN_MS).unref();
       this.#resolveJoin = () => {
         clearTimeout(timer);
         resolve(undefined);
       };
-      // Once in, there is nothing to reject: what comes after only ends the connection.
+      // Once joined, rejecting has no effect on the promise: a later failure only ends the connection.
       this.#rejectJoin = (why, type) => {
         clearTimeout(timer);
         reject(Object.assign(new Error(why), { reject: type }));
@@ -170,7 +172,7 @@ export class MumbleClient {
   #voice(body) {
     const v = parseVoice(body);
     const who = v && this.server.users.get(v.session);
-    // Talk to the channel only, from someone in it; never a whisper.
+    // Only normal talk to the channel (target 0) from someone else in it; never a whisper.
     if (v && who && this.inChannel && v.target === 0 && who.channel === this.channel && v.session !== this.session)
       this.o.onVoice?.({ session: v.session, name: who.name, id: who.id, opus: Buffer.from(v.opus), last: v.last });
   }
@@ -181,7 +183,7 @@ export class MumbleClient {
     if (u && u.session === this.session) this.#ownChannelIs(u.channel);
   }
 
-  /** Where the server has put the bot: in its channel at last, or moved out of it. @param {number} channel */
+  /** The channel the server says the bot is in: it has arrived in its own, or was moved out of it. @param {number} channel */
   #ownChannelIs(channel) {
     if (this.#onMovedIn && channel === this.channel) {
       this.inChannel = true;
@@ -197,20 +199,20 @@ export class MumbleClient {
     if (m.session === this.session) this.#end(`removed${m.reason ? `: ${m.reason}` : ""}`);
   }
 
-  /** Refused something: the move to its channel, or something said. @param {import("./proto.mjs").PermissionDenied} m */
+  /** The server denied something: the move to the channel, or something later. @param {import("./proto.mjs").PermissionDenied} m */
   #permissionDenied(m) {
     if (this.#onMovedIn) return this.#rejectJoin("move refused");
     this.o.onText?.(undefined, `denied: ${m.reason ?? m.type}`);
   }
 
-  /** Signed in: to the channel. @param {import("./proto.mjs").ServerSync} m */
+  /** The bot is signed in: it goes to its channel. @param {import("./proto.mjs").ServerSync} m */
   #serverSync(m) {
     this.session = m.session ?? -1;
     const found = this.server.channelNamed(this.o.channel);
     if (found === undefined) return this.#rejectJoin(`no channel "${this.o.channel}"`);
     this.channel = found;
-    // Muted: it only listens. Not deafened: a deafened client is sent no voice. Joined once
-    // the server says it is there.
+    // Muted: it only listens. Not deafened: a deafened client is sent no voice. join() resolves
+    // once the server says the bot is in the channel.
     const there = this.server.users.get(this.session)?.channel === this.channel;
     this.#send("UserState", {
       session: this.session,
@@ -223,7 +225,7 @@ export class MumbleClient {
     this.#resolveJoin();
   }
 
-  /** Those in the bot's channel, itself aside. @returns {Person[]} */
+  /** The users in the bot's channel, except the bot. @returns {Person[]} */
   people() {
     return this.server.peopleIn(this.channel, this.session);
   }

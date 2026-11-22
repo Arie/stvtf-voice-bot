@@ -1,4 +1,5 @@
-// A made-up stand-in, taken as the real thing it stands for (what the code is given decides which).
+// Test helpers. `stand` passes a made-up object off as the real type (the type is inferred from
+// where it is used).
 
 /** @template T @param {unknown} fake @returns {T} */
 export const stand = fake => /** @type {T} */ (fake);

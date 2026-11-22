@@ -1,4 +1,4 @@
-// How the bot ends, on SIGINT or SIGTERM: it stops once, given `ms` at most for its goodbyes,
+// How the bot ends, on SIGINT or SIGTERM: it calls `stop` once, waits `ms` at most for it,
 // then exits.
 
 /**

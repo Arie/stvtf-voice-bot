@@ -7,8 +7,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-  # What the bot runs on (discord.js, its voice) and the dev tools (ESLint, Prettier,
-  # TypeScript): pinned exactly, each kind bumped together.
+  # Runtime dependencies (discord.js, @discordjs/voice) and dev tools (ESLint, Prettier,
+  # TypeScript) are pinned to exact versions. Each group is updated in one pull request.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -18,7 +18,7 @@ updates:
         dependency-type: production
       dev-tools:
         dependency-type: development
-    # Follows the Node the image runs: moved by hand, with it.
+    # Must match the Node major of the Docker image: updated by hand, together with the image.
     ignore:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
@@ -26,7 +26,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # A Node major is moved by hand, to an LTS.
+    # A Node major is updated by hand, and only to an LTS release.
     ignore:
       - dependency-name: node
         update-types: ["version-update:semver-major"]

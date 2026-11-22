@@ -140,7 +140,7 @@ test("with a certificate it signs in by that one's name, says where it is listed
   const ids = new Identities(identitiesOf(readFileSync(new URL("fixtures/mumble-certs.b64", import.meta.url), "utf8")));
   const w = session({}, { identities: ids });
   await until(() => w.servers.length);
-  // The name is another's on this server: the match's, then.
+  // The certificate's name is registered to another on this server: it tries the match's name next.
   w.server().send("Reject", { type: 3, reason: "Wrong certificate or password for existing user" });
   await until(() => w.servers.length === 2);
   await until(() => w.server().sent("Authenticate").length);

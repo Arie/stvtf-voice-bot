@@ -8,7 +8,7 @@ import { startMumble } from "./mumble/bot.mjs";
 import { Identities } from "./mumble/certs.mjs";
 import { stopOnSignal } from "./shutdown.mjs";
 
-// How long the goodbyes in Discord and Mumble may take, all at once, before it exits.
+// How long leaving Discord and Mumble may take in total before the process exits.
 const GOODBYE_MS = 5000;
 
 let settings;

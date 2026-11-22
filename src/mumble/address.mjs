@@ -1,11 +1,12 @@
-// Whether a Mumble server may be joined: only one out on the internet, unless said otherwise
-// (for trying out, and at a LAN), so a link on stv.tf cannot point the bot inside its network.
+// Decides whether a Mumble server may be joined: only one with a public internet address, unless
+// STVTF_MUMBLE_ANYWHERE is set (for testing, and at a LAN). So a request on stv.tf cannot point
+// the bot at its own network.
 import dns from "node:dns/promises";
 import net from "node:net";
 
 /** An IPv6 address (as net.isIPv6 takes it) as its 16 bytes. @param {string} ip */
 function ipv6Bytes(ip) {
-  // One that ends in IPv4's form: those four bytes as two groups.
+  // An address that ends in dotted IPv4 form: those four bytes are rewritten as two hex groups.
   const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
   const [a, b, c, d] = v4 ? v4.slice(1).map(Number) : [];
   const text = v4 ? `${ip.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}` : ip;
@@ -16,8 +17,8 @@ function ipv6Bytes(ip) {
   return groups.flatMap(g => [parseInt(g, 16) >> 8, parseInt(g, 16) & 255]);
 }
 
-// What is not out on the internet: this machine, its networks, a link's own, multicast and the
-// rest of what is set aside; and NAT64 and 6to4, which lead to IPv4 addresses of any kind.
+// Addresses that are not on the public internet: this machine, private networks, link-local,
+// multicast and the other reserved ranges; and NAT64 and 6to4, which can lead to any IPv4 address.
 const INSIDE = new net.BlockList();
 for (const [ip, bits] of /** @type {[string, number][]} */ ([
   ["0.0.0.0", 8],
@@ -42,14 +43,15 @@ for (const [ip, bits] of /** @type {[string, number][]} */ ([
   INSIDE.addSubnet(ip, bits, "ipv6");
 
 /**
- * Whether `ip` is out on the internet: not this machine, its network, or a link's own.
+ * Whether `ip` is a public internet address: not this machine, a private network or link-local.
  * @param {string} ip @returns {boolean}
  */
 export function isPublic(ip) {
   if (net.isIPv4(ip)) return !INSIDE.check(ip, "ipv4");
   if (!net.isIPv6(ip)) return false;
   const x = ipv6Bytes(ip);
-  // IPv4 in IPv6 (mapped, or the old compatible form, :: and ::1 among them): as that address.
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) is judged as that IPv4 address. The old IPv4-compatible
+  // form (::a.b.c.d, which includes :: and ::1) is never public.
   if (x.slice(0, 10).every(n => n === 0)) return x[10] === 255 && x[11] === 255 && isPublic(x.slice(12).join("."));
   return !INSIDE.check(ip, "ipv6");
 }
@@ -57,9 +59,9 @@ export function isPublic(ip) {
 /** @typedef {(host: string, o: { all: true }) => Promise<{ address: string }[]>} Lookup */
 
 /**
- * Where to reach `host`: one of its addresses, once every one is known to be out on the internet
- * (a name can give one public and one private, and a second lookup another); with `anywhere`,
- * any (for trying out, and at a LAN).
+ * The address to reach `host` at: its first one, once all its addresses are known to be public
+ * (a name can resolve to one public and one private address, and a second lookup can give
+ * another). With `anywhere`, any address is allowed (for testing, and at a LAN).
  * @param {string} host @param {{ lookup?: Lookup; anywhere?: boolean }} [o]
  */
 export async function addressOf(host, { lookup = dns.lookup, anywhere = false } = {}) {
